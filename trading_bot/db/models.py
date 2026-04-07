@@ -33,6 +33,12 @@ class Instrument(Base):
     stop_ticks = Column(Integer, default=3, nullable=False)
     lot_size = Column(Integer, default=1, nullable=False)
 
+    # Параметры стабилизации выхода (добавлены в FIX_01)
+    ofi_smooth_window = Column(Integer, default=10, nullable=False)
+    min_hold_seconds = Column(Integer, default=30, nullable=False)
+    ofi_exit_threshold = Column(Float, default=0.4, nullable=False)
+    min_ofi_confirmations = Column(Integer, default=3, nullable=False)
+
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 

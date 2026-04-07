@@ -13,7 +13,8 @@ OFI — это метрика, показывающая, кто агрессив
   ~0   = баланс / неопределённость
 """
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+from collections import deque
+from typing import Any, Dict, Deque, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -23,18 +24,29 @@ class OFICalculator:
     Вычисляет OFI по изменениям лучших N уровней стакана.
 
     Параметры задаются через конфиг инструмента:
-      - ofi_levels: int — сколько уровней анализировать (обычно 3–10)
+      - ofi_levels:       int — сколько уровней анализировать (обычно 3–10)
+      - smooth_window:    int — окно сглаживания по скользящему среднему (обычно 5–20)
     """
 
-    def __init__(self, ofi_levels: int) -> None:
+    def __init__(self, ofi_levels: int, smooth_window: int = 1) -> None:
         # Количество уровней стакана для анализа
         self.ofi_levels = ofi_levels
+
+        # Размер окна сглаживания. При значении 1 — сглаживание отключено
+        # (возвращается мгновенное значение, поведение как раньше).
+        self.smooth_window = max(1, smooth_window)
 
         # Предыдущее состояние стакана — нужно для вычисления дельты
         self._prev_bids: List[Tuple[float, int]] = []  # [(price, qty), ...]
         self._prev_asks: List[Tuple[float, int]] = []
 
-        # Последнее рассчитанное значение OFI
+        # Скользящее окно последних значений OFI для сглаживания.
+        # Стакан на ликвидных бумагах (SBER) обновляется несколько раз в секунду,
+        # поэтому мгновенный OFI нестабилен — одна крупная заявка может перевернуть
+        # знак. Среднее по N последним снимкам даёт более устойчивый сигнал.
+        self._ofi_history: Deque[float] = deque(maxlen=self.smooth_window)
+
+        # Последнее рассчитанное (уже сглаженное) значение OFI
         self._last_ofi: Optional[float] = None
 
     def update(self, bids: List[Tuple[float, int]], asks: List[Tuple[float, int]]) -> Optional[float]:
@@ -72,12 +84,19 @@ class OFICalculator:
         # (adaptive), но для простоты — через заданный масштаб.
         ofi_normalized = self._normalize(total_flow)
 
+        # Сглаживаем OFI по скользящему окну чтобы убрать краткосрочный шум стакана.
+        # Добавляем текущее мгновенное значение в историю и возвращаем среднее.
+        # Если история ещё не заполнена — берём среднее по имеющимся значениям,
+        # что безопаснее чем возвращать None или ждать заполнения окна.
+        self._ofi_history.append(ofi_normalized)
+        smoothed_ofi = sum(self._ofi_history) / len(self._ofi_history)
+
         # Сохраняем текущее состояние как предыдущее для следующего тика
         self._prev_bids = curr_bids
         self._prev_asks = curr_asks
-        self._last_ofi = ofi_normalized
+        self._last_ofi = smoothed_ofi
 
-        return ofi_normalized
+        return smoothed_ofi
 
     def _compute_side_ofi(
         self,
@@ -159,4 +178,5 @@ class OFICalculator:
         """Сбросить состояние — используется при переподключении стрима."""
         self._prev_bids = []
         self._prev_asks = []
+        self._ofi_history.clear()
         self._last_ofi = None

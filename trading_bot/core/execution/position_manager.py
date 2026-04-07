@@ -17,7 +17,7 @@ from typing import Any, Dict, Optional
 
 from trading_bot.core.execution.order_manager import OrderManager
 from trading_bot.core.risk.risk_manager import RiskCheckFailed, RiskManager
-from trading_bot.core.strategy.base_strategy import Signal, SignalType
+from trading_bot.core.strategy.base_strategy import Signal, SignalReason, SignalType
 from trading_bot.db import repository
 from trading_bot.db.models import Order
 
@@ -121,6 +121,19 @@ class PositionManager:
         if signal.signal_type in (SignalType.LONG, SignalType.SHORT):
             self._open_position(signal, db_signal.id)
         elif signal.signal_type == SignalType.EXIT:
+            # Проверяем минимальное время удержания позиции перед закрытием по OFI.
+            # Это защита от мгновенного закрытия сразу после открытия из-за шума стакана.
+            # Стоп-лосс и тайм-аут этот блок не затрагивают — они идут напрямую через
+            # _close_position и не проходят через on_signal с reason=ofi_reversed.
+            if signal.reason == SignalReason.OFI_REVERSED and self._position is not None:
+                min_hold = self.params.get("min_hold_seconds", 0)
+                held_seconds = (datetime.utcnow() - self._position.open_at).total_seconds()
+                if held_seconds < min_hold:
+                    logger.info(
+                        f"Выход по OFI заблокирован: удержание {held_seconds:.1f} сек "
+                        f"< минимум {min_hold} сек. Сигнал проигнорирован."
+                    )
+                    return
             self._close_position(signal, db_signal.id, exit_reason=signal.reason.value)
 
     def _open_position(self, signal: Signal, signal_id: int) -> None:
