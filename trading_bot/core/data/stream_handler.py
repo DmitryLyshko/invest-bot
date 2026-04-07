@@ -104,6 +104,7 @@ class StreamHandler:
                 if market_data.orderbook:
                     try:
                         normalized = normalize_orderbook(market_data.orderbook)
+                        logger.debug(f"Стакан получен: {normalized.get('figi')}")
                         self._on_orderbook(normalized)
                     except Exception as e:
                         logger.error(f"Ошибка обработки стакана: {e}")
