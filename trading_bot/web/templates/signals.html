@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Сигналы — Trading Bot{% endblock %}
+
+{% block content %}
+<h1 class="page-title">Журнал сигналов</h1>
+
+<div class="card">
+    <div style="font-size: 0.8rem; color: #718096; margin-bottom: 0.75rem;">
+        Всего сигналов: {{ total }}
+        <span style="margin-left: 1rem; color: #4a5568;">Включая неисполненные (acted_on = Нет)</span>
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Время</th>
+                    <th>Тип</th>
+                    <th>OFI</th>
+                    <th>Объём принта</th>
+                    <th>Сторона принта</th>
+                    <th>Причина</th>
+                    <th>Исполнен</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for s in signals %}
+                <tr>
+                    <td style="white-space: nowrap; color: #a0aec0; font-size: 0.8rem;">
+                        {{ s.created_at.strftime('%d.%m.%y %H:%M:%S') }}
+                    </td>
+                    <td><span class="badge badge-{{ s.signal_type }}">{{ s.signal_type }}</span></td>
+                    <td>
+                        {% if s.ofi_value is not none %}
+                        <span style="color: {{ '#68d391' if s.ofi_value > 0 else '#fc8181' if s.ofi_value < 0 else '#a0aec0' }}">
+                            {{ '%.4f'|format(s.ofi_value) }}
+                        </span>
+                        {% else %}—{% endif %}
+                    </td>
+                    <td style="color: #a0aec0;">
+                        {{ '%.0f'|format(s.print_volume) if s.print_volume else '—' }}
+                    </td>
+                    <td>
+                        {% if s.print_side %}
+                        <span class="badge badge-{{ s.print_side }}">{{ s.print_side }}</span>
+                        {% else %}—{% endif %}
+                    </td>
+                    <td style="color: #718096; font-size: 0.8rem;">{{ s.reason or '—' }}</td>
+                    <td>
+                        <span class="badge {{ 'badge-yes' if s.acted_on else 'badge-no' }}">
+                            {{ 'Да' if s.acted_on else 'Нет' }}
+                        </span>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="7" style="text-align: center; color: #718096; padding: 2rem;">Сигналов нет</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if total_pages > 1 %}
+    <div class="pagination">
+        {% if page > 1 %}<a href="?page={{ page - 1 }}">← Пред</a>{% endif %}
+        <span class="current">{{ page }} / {{ total_pages }}</span>
+        {% if page < total_pages %}<a href="?page={{ page + 1 }}">След →</a>{% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

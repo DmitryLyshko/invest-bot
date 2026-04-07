@@ -1,0 +1,22 @@
+# T-Invest API
+tinkoff-investments==0.2.0b63
+
+# Database
+SQLAlchemy==2.0.36
+PyMySQL==1.1.1
+cryptography==43.0.3
+
+# Web
+Flask==3.1.0
+Flask-Login==0.6.3
+bcrypt==4.2.0
+
+# Scheduler
+APScheduler==3.10.4
+
+# Config
+python-dotenv==1.0.1
+PyYAML==6.0.2
+
+# Utils
+pytz==2024.2

@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Trading Bot{% endblock %}</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f1117; color: #e2e8f0; min-height: 100vh; }
+        a { color: #63b3ed; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+
+        /* Navigation */
+        nav { background: #1a1d27; border-bottom: 1px solid #2d3748; padding: 0 2rem; display: flex; align-items: center; height: 56px; gap: 2rem; }
+        nav .brand { font-weight: 700; font-size: 1.1rem; color: #fff; }
+        nav a { color: #a0aec0; font-size: 0.9rem; padding: 0.5rem 0; border-bottom: 2px solid transparent; }
+        nav a:hover, nav a.active { color: #fff; border-bottom-color: #4299e1; text-decoration: none; }
+        nav .spacer { flex: 1; }
+        nav .logout { color: #718096; font-size: 0.85rem; }
+
+        /* Layout */
+        .container { max-width: 1400px; margin: 0 auto; padding: 2rem; }
+        .page-title { font-size: 1.5rem; font-weight: 600; margin-bottom: 1.5rem; color: #fff; }
+
+        /* Cards */
+        .card { background: #1a1d27; border: 1px solid #2d3748; border-radius: 8px; padding: 1.25rem; }
+        .card-title { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: #718096; margin-bottom: 0.5rem; }
+        .card-value { font-size: 1.75rem; font-weight: 700; color: #fff; }
+        .card-value.positive { color: #68d391; }
+        .card-value.negative { color: #fc8181; }
+
+        /* Grid */
+        .grid { display: grid; gap: 1rem; }
+        .grid-4 { grid-template-columns: repeat(4, 1fr); }
+        .grid-2 { grid-template-columns: repeat(2, 1fr); }
+
+        /* Tables */
+        .table-wrap { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+        th { text-align: left; padding: 0.75rem 1rem; background: #161820; color: #718096; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 1px solid #2d3748; }
+        td { padding: 0.65rem 1rem; border-bottom: 1px solid #1e2233; }
+        tr:last-child td { border-bottom: none; }
+        tr:hover td { background: #1e2233; }
+        .badge { display: inline-block; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600; }
+        .badge-long, .badge-buy { background: #1a3a2a; color: #68d391; }
+        .badge-short, .badge-sell { background: #3a1a1a; color: #fc8181; }
+        .badge-exit { background: #2a2a3a; color: #b794f4; }
+        .badge-yes { background: #1a2a3a; color: #63b3ed; }
+        .badge-no { background: #2a2020; color: #718096; }
+
+        /* Bot status */
+        .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+        .status-dot.active { background: #68d391; box-shadow: 0 0 6px #68d391; }
+        .status-dot.inactive { background: #718096; }
+
+        /* Buttons */
+        .btn { padding: 0.5rem 1rem; border-radius: 6px; border: none; cursor: pointer; font-size: 0.875rem; font-weight: 600; transition: opacity 0.15s; }
+        .btn:hover { opacity: 0.85; }
+        .btn-primary { background: #4299e1; color: #fff; }
+        .btn-success { background: #38a169; color: #fff; }
+        .btn-danger { background: #e53e3e; color: #fff; }
+        .btn-sm { padding: 0.3rem 0.7rem; font-size: 0.8rem; }
+
+        /* Forms */
+        input, select { background: #161820; border: 1px solid #2d3748; color: #e2e8f0; border-radius: 6px; padding: 0.4rem 0.75rem; font-size: 0.875rem; }
+        input:focus, select:focus { outline: none; border-color: #4299e1; }
+        .form-row { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; margin-bottom: 1rem; }
+        label { font-size: 0.8rem; color: #a0aec0; }
+
+        /* Pagination */
+        .pagination { display: flex; gap: 0.5rem; margin-top: 1rem; align-items: center; }
+        .pagination a { padding: 0.3rem 0.65rem; border: 1px solid #2d3748; border-radius: 4px; font-size: 0.8rem; color: #a0aec0; }
+        .pagination a:hover { border-color: #4299e1; color: #4299e1; text-decoration: none; }
+        .pagination .current { padding: 0.3rem 0.65rem; border: 1px solid #4299e1; border-radius: 4px; font-size: 0.8rem; color: #4299e1; }
+
+        /* Section title */
+        .section-title { font-size: 0.9rem; font-weight: 600; color: #a0aec0; margin-bottom: 0.75rem; margin-top: 1.5rem; }
+
+        @media (max-width: 768px) {
+            .grid-4 { grid-template-columns: repeat(2, 1fr); }
+            .grid-2 { grid-template-columns: 1fr; }
+            .container { padding: 1rem; }
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <span class="brand">Trading Bot</span>
+        <a href="{{ url_for('dashboard.index') }}" class="{{ 'active' if request.endpoint == 'dashboard.index' }}">Дашборд</a>
+        <a href="{{ url_for('trades.index') }}" class="{{ 'active' if request.endpoint == 'trades.index' }}">Сделки</a>
+        <a href="{{ url_for('signals.index') }}" class="{{ 'active' if request.endpoint == 'signals.index' }}">Сигналы</a>
+        <a href="{{ url_for('stats.index') }}" class="{{ 'active' if request.endpoint == 'stats.index' }}">Статистика</a>
+        <span class="spacer"></span>
+        <a href="{{ url_for('logout') }}" class="logout">Выход</a>
+    </nav>
+    <div class="container">
+        {% block content %}{% endblock %}
+    </div>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

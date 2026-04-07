@@ -1,0 +1,195 @@
+{% extends "base.html" %}
+{% block title %}Дашборд — Trading Bot{% endblock %}
+
+{% block content %}
+<div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem;">
+    <h1 class="page-title" style="margin-bottom: 0;">Дашборд</h1>
+    <div id="bot-status" style="display: flex; align-items: center; gap: 0.5rem;">
+        <span class="status-dot" id="status-dot"></span>
+        <span id="status-text" style="font-size: 0.875rem; color: #a0aec0;"></span>
+    </div>
+    <button id="toggle-btn" class="btn btn-sm" onclick="toggleBot()"></button>
+</div>
+
+<!-- KPI Cards -->
+<div class="grid grid-4" style="margin-bottom: 1.5rem;">
+    <div class="card">
+        <div class="card-title">P&L сегодня</div>
+        <div class="card-value {{ 'positive' if today_pnl >= 0 else 'negative' }}">
+            {{ '{:+.2f}'.format(today_pnl) }} ₽
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-title">Сделок сегодня</div>
+        <div class="card-value">{{ today_trades }}</div>
+        <div style="font-size: 0.75rem; color: #718096; margin-top: 0.25rem;">всего: {{ total_trades }}</div>
+    </div>
+    <div class="card">
+        <div class="card-title">Win Rate (сегодня)</div>
+        <div class="card-value {{ 'positive' if win_rate >= 50 else '' }}">{{ win_rate }}%</div>
+    </div>
+    <div class="card" id="position-card">
+        <div class="card-title">Открытая позиция</div>
+        <div id="position-info" class="card-value" style="font-size: 1rem;">—</div>
+    </div>
+</div>
+
+<!-- Equity Chart -->
+<div class="card" style="margin-bottom: 1.5rem;">
+    <div class="section-title">Накопленный P&L (30 дней)</div>
+    <canvas id="equityChart" height="80"></canvas>
+</div>
+
+<!-- Recent Tables -->
+<div class="grid grid-2">
+    <div class="card">
+        <div class="section-title" style="margin-top: 0;">Последние сигналы</div>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Время</th>
+                        <th>Тип</th>
+                        <th>OFI</th>
+                        <th>Исполнен</th>
+                        <th>Причина</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for s in recent_signals %}
+                    <tr>
+                        <td style="color: #718096; white-space: nowrap;">{{ s.created_at.strftime('%H:%M:%S') }}</td>
+                        <td><span class="badge badge-{{ s.signal_type }}">{{ s.signal_type }}</span></td>
+                        <td>{{ '%.3f'|format(s.ofi_value) if s.ofi_value is not none else '—' }}</td>
+                        <td><span class="badge {{ 'badge-yes' if s.acted_on else 'badge-no' }}">{{ 'Да' if s.acted_on else 'Нет' }}</span></td>
+                        <td style="color: #718096; font-size: 0.8rem;">{{ s.reason or '—' }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="5" style="text-align: center; color: #718096; padding: 1.5rem;">Сигналов нет</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div style="margin-top: 0.75rem; text-align: right;">
+            <a href="{{ url_for('signals.index') }}" style="font-size: 0.8rem;">Все сигналы →</a>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="section-title" style="margin-top: 0;">Последние сделки</div>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Время</th>
+                        <th>Направление</th>
+                        <th>P&L</th>
+                        <th>Удержание</th>
+                        <th>Выход</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for t in recent_trades %}
+                    <tr>
+                        <td style="color: #718096; white-space: nowrap;">{{ t.close_at.strftime('%d.%m %H:%M') }}</td>
+                        <td><span class="badge badge-{{ t.direction }}">{{ t.direction }}</span></td>
+                        <td class="{{ 'positive' if t.pnl_rub >= 0 else 'negative' }}" style="font-weight: 600;">
+                            {{ '{:+.2f}'.format(t.pnl_rub) }} ₽
+                        </td>
+                        <td style="color: #718096;">{{ (t.hold_seconds // 60) }}м</td>
+                        <td style="color: #718096; font-size: 0.8rem;">{{ t.exit_reason }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="5" style="text-align: center; color: #718096; padding: 1.5rem;">Сделок нет</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div style="margin-top: 0.75rem; text-align: right;">
+            <a href="{{ url_for('trades.index') }}" style="font-size: 0.8rem;">Все сделки →</a>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const chartData = {{ chart_data | safe }};
+
+// Equity chart
+const ctx = document.getElementById('equityChart').getContext('2d');
+new Chart(ctx, {
+    type: 'line',
+    data: {
+        labels: chartData.map(d => d.day),
+        datasets: [{
+            data: chartData.map(d => d.pnl),
+            borderColor: '#4299e1',
+            backgroundColor: 'rgba(66,153,225,0.08)',
+            borderWidth: 2,
+            pointRadius: 3,
+            fill: true,
+            tension: 0.3,
+        }]
+    },
+    options: {
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: {
+            x: { grid: { color: '#1e2233' }, ticks: { color: '#718096', font: { size: 11 } } },
+            y: { grid: { color: '#1e2233' }, ticks: { color: '#718096', font: { size: 11 },
+                callback: v => v.toFixed(0) + ' ₽' } }
+        }
+    }
+});
+
+// Bot status
+async function refreshStatus() {
+    const r = await fetch('/api/bot/status');
+    const d = await r.json();
+    const dot = document.getElementById('status-dot');
+    const text = document.getElementById('status-text');
+    const btn = document.getElementById('toggle-btn');
+    if (d.active) {
+        dot.className = 'status-dot active';
+        text.textContent = 'Бот активен';
+        btn.className = 'btn btn-sm btn-danger';
+        btn.textContent = 'Остановить';
+    } else {
+        dot.className = 'status-dot inactive';
+        text.textContent = 'Бот остановлен';
+        btn.className = 'btn btn-sm btn-success';
+        btn.textContent = 'Запустить';
+    }
+}
+
+async function toggleBot() {
+    await fetch('/api/bot/toggle', { method: 'POST' });
+    refreshStatus();
+}
+
+// Position refresh
+async function refreshPosition() {
+    const r = await fetch('/api/position');
+    const d = await r.json();
+    const el = document.getElementById('position-info');
+    if (d.position) {
+        const p = d.position;
+        const pnlColor = p.unrealized_pnl >= 0 ? '#68d391' : '#fc8181';
+        el.innerHTML = `<span style="color: ${p.direction === 'long' ? '#68d391' : '#fc8181'}">${p.direction.toUpperCase()}</span>
+            <span style="font-size: 0.8rem; color: #a0aec0; display: block; margin-top: 0.25rem;">
+                ${p.quantity_lots} лот @ ${p.entry_price.toFixed(2)}<br>
+                <span style="color: ${pnlColor}">${p.unrealized_pnl >= 0 ? '+' : ''}${p.unrealized_pnl.toFixed(2)} ₽</span>
+                · ${p.hold_minutes}м
+            </span>`;
+    } else {
+        el.textContent = '—';
+    }
+}
+
+refreshStatus();
+refreshPosition();
+setInterval(refreshStatus, 10000);
+setInterval(refreshPosition, 5000);
+</script>
+{% endblock %}

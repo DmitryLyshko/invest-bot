@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block title %}Статистика — Trading Bot{% endblock %}
+
+{% block content %}
+<h1 class="page-title">Статистика</h1>
+
+<!-- Summary KPIs -->
+<div class="grid grid-4" style="margin-bottom: 1.5rem;">
+    <div class="card">
+        <div class="card-title">Суммарный P&L</div>
+        <div class="card-value {{ 'positive' if stats.total_pnl >= 0 else 'negative' }}">
+            {{ '{:+.2f}'.format(stats.total_pnl) }} ₽
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-title">Win Rate</div>
+        <div class="card-value {{ 'positive' if stats.win_rate >= 50 else '' }}">{{ stats.win_rate }}%</div>
+        <div style="font-size: 0.75rem; color: #718096; margin-top: 0.25rem;">из {{ stats.total_trades }} сделок</div>
+    </div>
+    <div class="card">
+        <div class="card-title">Profit Factor</div>
+        <div class="card-value {{ 'positive' if stats.profit_factor >= 1.5 else '' }}">
+            {{ stats.profit_factor if stats.profit_factor != 'inf' else '∞' }}
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-title">Среднее удержание</div>
+        <div class="card-value">
+            {% set mins = stats.avg_hold_seconds // 60 %}
+            {% if mins >= 60 %}{{ mins // 60 }}ч {{ mins % 60 }}м{% else %}{{ mins }}м{% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-4" style="margin-bottom: 1.5rem;">
+    <div class="card">
+        <div class="card-title">Средний выигрыш</div>
+        <div class="card-value positive">{{ '{:+.2f}'.format(stats.avg_win) }} ₽</div>
+    </div>
+    <div class="card">
+        <div class="card-title">Средний проигрыш</div>
+        <div class="card-value negative">{{ '{:.2f}'.format(stats.avg_loss) }} ₽</div>
+    </div>
+    <div class="card">
+        <div class="card-title">Лучшая сделка</div>
+        <div class="card-value positive">{{ '{:+.2f}'.format(stats.best_trade) }} ₽</div>
+    </div>
+    <div class="card">
+        <div class="card-title">Худшая сделка</div>
+        <div class="card-value negative">{{ '{:.2f}'.format(stats.worst_trade) }} ₽</div>
+    </div>
+</div>
+
+<!-- Charts -->
+<div class="grid grid-2">
+    <div class="card">
+        <div class="section-title" style="margin-top: 0;">P&L по часу дня</div>
+        <canvas id="hourChart" height="200"></canvas>
+    </div>
+    <div class="card">
+        <div class="section-title" style="margin-top: 0;">P&L по дню недели</div>
+        <canvas id="weekdayChart" height="200"></canvas>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const pnlByHour = {{ pnl_by_hour | safe }};
+const pnlByWeekday = {{ pnl_by_weekday | safe }};
+
+function barColor(v) { return v >= 0 ? 'rgba(104,211,145,0.7)' : 'rgba(252,129,129,0.7)'; }
+
+new Chart(document.getElementById('hourChart'), {
+    type: 'bar',
+    data: {
+        labels: pnlByHour.map(d => d.hour + ':00'),
+        datasets: [{
+            data: pnlByHour.map(d => d.pnl),
+            backgroundColor: pnlByHour.map(d => barColor(d.pnl)),
+            borderRadius: 4,
+        }]
+    },
+    options: {
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: {
+            x: { grid: { color: '#1e2233' }, ticks: { color: '#718096', font: { size: 10 } } },
+            y: { grid: { color: '#1e2233' }, ticks: { color: '#718096', callback: v => v + ' ₽' } }
+        }
+    }
+});
+
+new Chart(document.getElementById('weekdayChart'), {
+    type: 'bar',
+    data: {
+        labels: pnlByWeekday.map(d => d.dow),
+        datasets: [{
+            data: pnlByWeekday.map(d => d.pnl),
+            backgroundColor: pnlByWeekday.map(d => barColor(d.pnl)),
+            borderRadius: 4,
+        }]
+    },
+    options: {
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: {
+            x: { grid: { color: '#1e2233' }, ticks: { color: '#718096' } },
+            y: { grid: { color: '#1e2233' }, ticks: { color: '#718096', callback: v => v + ' ₽' } }
+        }
+    }
+});
+</script>
+{% endblock %}

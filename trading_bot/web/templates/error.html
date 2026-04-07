@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Ошибка {{ code }}{% endblock %}
+{% block content %}
+<div style="text-align: center; padding: 4rem 0;">
+    <div style="font-size: 4rem; font-weight: 700; color: #2d3748;">{{ code }}</div>
+    <div style="font-size: 1.1rem; color: #718096; margin-top: 0.5rem;">{{ message }}</div>
+    <a href="{{ url_for('dashboard.index') }}" class="btn btn-primary" style="display: inline-block; margin-top: 1.5rem;">На главную</a>
+</div>
+{% endblock %}
