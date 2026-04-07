@@ -82,7 +82,7 @@ def sync_instruments_to_db(config: dict) -> Dict[str, dict]:
             "stop_ticks": params.get("stop_ticks", 3),
             "is_active": True,
         })
-        result[ticker] = {**params, "instrument_id": db_record.id}
+        result[ticker] = {**params, "db_instrument_id": db_record.id}
         logger.info(f"Синхронизирован инструмент: {ticker} (id={db_record.id})")
 
     return result
@@ -113,7 +113,7 @@ def get_first_account_id() -> str:
 
 def build_components(ticker: str, instrument_params: dict, account_id: str):
     """Создать все торговые компоненты для одного инструмента."""
-    instrument_id = instrument_params["instrument_id"]
+    instrument_id = instrument_params["db_instrument_id"]
 
     strategy = ComboStrategy(instrument_params)
     order_manager = OrderManager(account_id, instrument_id)
@@ -188,7 +188,8 @@ def main() -> None:
         figi=params["figi"],
         on_orderbook=on_orderbook,
         on_trade=on_trade,
-        orderbook_depth=params.get("ofi_levels", 5) + 2,
+        orderbook_depth=10,
+        instrument_id=params.get("instrument_id", ""),
     )
 
     stream_thread = threading.Thread(target=stream.start, daemon=True, name="stream")

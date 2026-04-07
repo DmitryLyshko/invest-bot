@@ -101,7 +101,6 @@ class ComboStrategy(BaseStrategy):
             return
 
         self._current_ofi = ofi
-        logger.debug(f"OFI={ofi:.3f} (порог={self.params['ofi_threshold']})")
 
         # Проверяем торговые часы
         if not self._is_trading_hours(timestamp):

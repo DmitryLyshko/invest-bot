@@ -42,8 +42,10 @@ class StreamHandler:
         on_orderbook: Callable[[Dict[str, Any]], None],
         on_trade: Callable[[Dict[str, Any]], None],
         orderbook_depth: int = 10,
+        instrument_id: str = "",
     ) -> None:
         self.figi = figi
+        self.instrument_id = instrument_id
         self._on_orderbook = on_orderbook
         self._on_trade = on_trade
         self.orderbook_depth = orderbook_depth
@@ -80,7 +82,11 @@ class StreamHandler:
         yield MarketDataRequest(
             subscribe_order_book_request=SubscribeOrderBookRequest(
                 subscription_action=SubscriptionAction.SUBSCRIPTION_ACTION_SUBSCRIBE,
-                instruments=[OrderBookInstrument(figi=self.figi, depth=self.orderbook_depth)],
+                instruments=[OrderBookInstrument(
+                    figi=self.figi,
+                    depth=self.orderbook_depth,
+                    instrument_id=self.instrument_id,
+                )],
             )
         )
         yield MarketDataRequest(
@@ -95,19 +101,14 @@ class StreamHandler:
     def _run_stream(self) -> None:
         """Внутренний цикл стрима — читает события и диспатчит их."""
         with Client(settings.TINKOFF_MARKET_TOKEN) as client:
-            logger.debug("Клиент создан, запускаем стрим...")
             for market_data in client.market_data_stream.market_data_stream(
                 self._request_iterator()
             ):
-                logger.debug("Получено событие из стрима")
                 if not self._running:
                     break
-
-                logger.debug(f"Стрим событие: {market_data}")
                 if market_data.orderbook:
                     try:
                         normalized = normalize_orderbook(market_data.orderbook)
-                        logger.debug(f"Стакан получен: {normalized.get('figi')}")
                         self._on_orderbook(normalized)
                     except Exception as e:
                         logger.error(f"Ошибка обработки стакана: {e}")
