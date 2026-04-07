@@ -15,8 +15,8 @@ from tinkoff.invest import (
     OrderType,
     PostOrderResponse,
     Quotation,
-    SandboxClient,
 )
+from tinkoff.invest.sandbox.client import SandboxClient
 from tinkoff.invest.utils import quotation_to_decimal
 
 from trading_bot.config import settings

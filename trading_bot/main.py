@@ -19,7 +19,8 @@ from typing import Dict, Optional
 
 import yaml
 from apscheduler.schedulers.background import BackgroundScheduler
-from tinkoff.invest import Client, SandboxClient
+from tinkoff.invest import Client
+from tinkoff.invest.sandbox.client import SandboxClient
 
 from trading_bot.config import settings
 from trading_bot.core.data.stream_handler import StreamHandler
