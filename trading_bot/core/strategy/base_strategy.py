@@ -37,7 +37,7 @@ class Signal:
     def __str__(self) -> str:
         return (
             f"Signal({self.signal_type.value}, reason={self.reason.value}, "
-            f"ofi={self.ofi_value:.3f if self.ofi_value is not None else 'N/A'})"
+            f"ofi={f'{self.ofi_value:.3f}' if self.ofi_value is not None else 'N/A'})"
         )
 
 
