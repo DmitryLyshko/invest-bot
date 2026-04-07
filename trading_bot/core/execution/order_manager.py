@@ -15,6 +15,7 @@ from tinkoff.invest import (
     OrderType,
     PostOrderResponse,
     Quotation,
+    SandboxClient,
 )
 from tinkoff.invest.utils import quotation_to_decimal
 
@@ -83,15 +84,26 @@ class OrderManager:
         )
 
         try:
-            with Client(settings.TINKOFF_TOKEN) as client:
-                response: PostOrderResponse = client.orders.post_order(
-                    figi=figi,
-                    quantity=quantity_lots,
-                    direction=api_direction,
-                    account_id=self.account_id,
-                    order_type=OrderType.ORDER_TYPE_MARKET,
-                    order_id=client_order_id,
-                )
+            if settings.USE_SANDBOX:
+                with SandboxClient(settings.TINKOFF_TOKEN) as client:
+                    response: PostOrderResponse = client.sandbox.post_sandbox_order(
+                        figi=figi,
+                        quantity=quantity_lots,
+                        direction=api_direction,
+                        account_id=self.account_id,
+                        order_type=OrderType.ORDER_TYPE_MARKET,
+                        order_id=client_order_id,
+                    )
+            else:
+                with Client(settings.TINKOFF_TOKEN) as client:
+                    response: PostOrderResponse = client.orders.post_order(
+                        figi=figi,
+                        quantity=quantity_lots,
+                        direction=api_direction,
+                        account_id=self.account_id,
+                        order_type=OrderType.ORDER_TYPE_MARKET,
+                        order_id=client_order_id,
+                    )
 
             broker_order_id = response.order_id
             executed_price = _quotation_to_float(response.executed_order_price) if response.executed_order_price else None
@@ -141,11 +153,18 @@ class OrderManager:
         Используется для проверки исполнения отложенных ордеров.
         """
         try:
-            with Client(settings.TINKOFF_TOKEN) as client:
-                response = client.orders.get_order_state(
-                    account_id=self.account_id,
-                    order_id=broker_order_id,
-                )
+            if settings.USE_SANDBOX:
+                with SandboxClient(settings.TINKOFF_TOKEN) as client:
+                    response = client.sandbox.get_sandbox_order_state(
+                        account_id=self.account_id,
+                        order_id=broker_order_id,
+                    )
+            else:
+                with Client(settings.TINKOFF_TOKEN) as client:
+                    response = client.orders.get_order_state(
+                        account_id=self.account_id,
+                        order_id=broker_order_id,
+                    )
             status_map = {1: "new", 2: "pending", 3: "cancelled", 4: "filled", 5: "rejected"}
             return status_map.get(response.execution_report_status, "unknown")
         except Exception as e:
@@ -155,11 +174,18 @@ class OrderManager:
     def cancel_order(self, broker_order_id: str) -> bool:
         """Отменить активный ордер. Возвращает True при успехе."""
         try:
-            with Client(settings.TINKOFF_TOKEN) as client:
-                client.orders.cancel_order(
-                    account_id=self.account_id,
-                    order_id=broker_order_id,
-                )
+            if settings.USE_SANDBOX:
+                with SandboxClient(settings.TINKOFF_TOKEN) as client:
+                    client.sandbox.cancel_sandbox_order(
+                        account_id=self.account_id,
+                        order_id=broker_order_id,
+                    )
+            else:
+                with Client(settings.TINKOFF_TOKEN) as client:
+                    client.orders.cancel_order(
+                        account_id=self.account_id,
+                        order_id=broker_order_id,
+                    )
             logger.info(f"Ордер {broker_order_id} отменён")
             db_order = repository.get_order_by_broker_id(broker_order_id)
             if db_order:

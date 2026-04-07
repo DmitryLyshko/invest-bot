@@ -19,7 +19,7 @@ from typing import Dict, Optional
 
 import yaml
 from apscheduler.schedulers.background import BackgroundScheduler
-from tinkoff.invest import Client
+from tinkoff.invest import Client, SandboxClient
 
 from trading_bot.config import settings
 from trading_bot.core.data.stream_handler import StreamHandler
@@ -89,15 +89,25 @@ def sync_instruments_to_db(config: dict) -> Dict[str, dict]:
 
 def get_first_account_id() -> str:
     """Получить первый доступный счёт из T-Invest API."""
-    with Client(settings.TINKOFF_TOKEN) as client:
-        response = client.users.get_accounts()
-        if not response.accounts:
-            raise RuntimeError("Нет доступных счётов в T-Invest")
-        account = response.accounts[0]
-        logging.getLogger(__name__).info(
-            f"Используется счёт: id={account.id}, name={account.name}"
-        )
-        return account.id
+    logger = logging.getLogger(__name__)
+    if settings.USE_SANDBOX:
+        with SandboxClient(settings.TINKOFF_TOKEN) as client:
+            response = client.sandbox.get_sandbox_accounts()
+            if not response.accounts:
+                new_account = client.sandbox.open_sandbox_account()
+                logger.info(f"Создан sandbox счёт: id={new_account.account_id}")
+                return new_account.account_id
+            account = response.accounts[0]
+            logger.info(f"Используется sandbox счёт: id={account.id}")
+            return account.id
+    else:
+        with Client(settings.TINKOFF_TOKEN) as client:
+            response = client.users.get_accounts()
+            if not response.accounts:
+                raise RuntimeError("Нет доступных счётов в T-Invest")
+            account = response.accounts[0]
+            logger.info(f"Используется счёт: id={account.id}, name={account.name}")
+            return account.id
 
 
 def build_components(ticker: str, instrument_params: dict, account_id: str):
