@@ -324,7 +324,7 @@ class ComboStrategy(BaseStrategy):
         # Пропускаем первые N минут после открытия — высокая волатильность
         # на открытии делает сигналы менее надёжными
         skip_minutes = self.params.get("skip_first_minutes", 5)
-        skip_until = time(start_h, start_m + skip_minutes) if start_m + skip_minutes < 60 else time(start_h + 1, (start_m + skip_minutes) % 60)
+        skip_until = (datetime(2000, 1, 1, start_h, start_m) + timedelta(minutes=skip_minutes)).time()
 
         if current_time < skip_until:
             return False

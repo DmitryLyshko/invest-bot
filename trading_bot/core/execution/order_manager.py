@@ -111,11 +111,11 @@ class OrderManager:
 
             # Определяем статус: market order обычно сразу filled
             status_map = {
-                1: "new",
-                2: "pending",
-                3: "cancelled",
-                4: "filled",
-                5: "rejected",
+                1: "filled",    # EXECUTION_REPORT_STATUS_FILL
+                2: "rejected",  # EXECUTION_REPORT_STATUS_REJECTED
+                3: "cancelled", # EXECUTION_REPORT_STATUS_CANCELLED
+                4: "new",       # EXECUTION_REPORT_STATUS_NEW
+                5: "pending",   # EXECUTION_REPORT_STATUS_PARTIALLYFILL
             }
             status = status_map.get(response.execution_report_status, "pending")
 
@@ -165,7 +165,7 @@ class OrderManager:
                         account_id=self.account_id,
                         order_id=broker_order_id,
                     )
-            status_map = {1: "new", 2: "pending", 3: "cancelled", 4: "filled", 5: "rejected"}
+            status_map = {1: "filled", 2: "rejected", 3: "cancelled", 4: "new", 5: "pending"}
             return status_map.get(response.execution_report_status, "unknown")
         except Exception as e:
             logger.error(f"Ошибка получения статуса ордера {broker_order_id}: {e}")
