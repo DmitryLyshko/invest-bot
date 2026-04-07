@@ -95,9 +95,11 @@ class StreamHandler:
     def _run_stream(self) -> None:
         """Внутренний цикл стрима — читает события и диспатчит их."""
         with Client(settings.TINKOFF_MARKET_TOKEN) as client:
+            logger.debug("Клиент создан, запускаем стрим...")
             for market_data in client.market_data_stream.market_data_stream(
                 self._request_iterator()
             ):
+                logger.debug("Получено событие из стрима")
                 if not self._running:
                     break
 
