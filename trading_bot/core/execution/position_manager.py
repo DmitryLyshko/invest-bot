@@ -308,10 +308,10 @@ class PositionManager:
 
     def _check_stop_loss(self, current_price: float) -> None:
         """
-        Проверить стоп-лосс в тиках.
+        Проверить стоп-лосс и тейк-профит в тиках.
 
-        stop_ticks из конфига определяет, на сколько минимальных шагов цены
-        допускается движение против позиции. При превышении — принудительное закрытие.
+        stop_ticks  — движение против позиции, при котором закрываемся с убытком.
+        take_profit_ticks — движение в пользу позиции, при котором фиксируем прибыль.
 
         Размер тика зависит от инструмента. Для SBER ≈ 0.01 руб (1 копейка).
         В production нужно брать min_price_increment из API инструмента.
@@ -319,17 +319,19 @@ class PositionManager:
         if self._position is None:
             return
 
-        stop_ticks = self.params.get("stop_ticks", 3)
-        # TODO: получать реальный шаг цены из API; сейчас используем заглушку
         tick_size = self.params.get("tick_size", 0.01)
-        stop_distance = stop_ticks * tick_size
-
         pos = self._position
+
         if pos.direction == "long":
             loss_distance = pos.entry_price - current_price
+            gain_distance = current_price - pos.entry_price
         else:
             loss_distance = current_price - pos.entry_price
+            gain_distance = pos.entry_price - current_price
 
+        # ── Стоп-лосс ────────────────────────────────────────────────────────
+        stop_ticks = self.params.get("stop_ticks", 30)
+        stop_distance = stop_ticks * tick_size
         if loss_distance >= stop_distance:
             logger.info(
                 f"СТОП-ЛОСС: движение против позиции {loss_distance:.4f} >= {stop_distance:.4f} "
@@ -347,6 +349,29 @@ class PositionManager:
                 acted_on=True,
             )
             self._close_position(sl_signal, db_signal.id, exit_reason="stop_loss")
+            return
+
+        # ── Тейк-профит ──────────────────────────────────────────────────────
+        take_profit_ticks = self.params.get("take_profit_ticks", 0)
+        if take_profit_ticks > 0:
+            take_distance = take_profit_ticks * tick_size
+            if gain_distance >= take_distance:
+                logger.info(
+                    f"ТЕЙК-ПРОФИТ: движение в пользу позиции {gain_distance:.4f} >= {take_distance:.4f} "
+                    f"({take_profit_ticks} тиков)"
+                )
+                from trading_bot.core.strategy.base_strategy import Signal, SignalType, SignalReason
+                tp_signal = Signal(signal_type=SignalType.EXIT, reason=SignalReason.TAKE_PROFIT)
+                db_signal = repository.save_signal(
+                    instrument_id=self.instrument_id,
+                    signal_type="exit",
+                    ofi_value=self.strategy.current_ofi or 0.0,
+                    print_volume=None,
+                    print_side=None,
+                    reason="take_profit",
+                    acted_on=True,
+                )
+                self._close_position(tp_signal, db_signal.id, exit_reason="take_profit")
 
     @property
     def open_position(self) -> Optional[OpenPosition]:

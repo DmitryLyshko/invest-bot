@@ -21,6 +21,7 @@ class SignalReason(str, Enum):
     OFI_REVERSED = "ofi_reversed"
     TIMEOUT = "timeout"
     STOP_LOSS = "stop_loss"
+    TAKE_PROFIT = "take_profit"
     MANUAL = "manual"
 
 
