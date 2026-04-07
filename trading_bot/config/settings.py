@@ -13,6 +13,8 @@ load_dotenv(BASE_DIR / ".env")
 
 # ─── T-Invest API ─────────────────────────────────────────────────────────────
 TINKOFF_TOKEN: str = os.environ["TINKOFF_TOKEN"]
+# Токен для чтения рыночных данных. Если не задан — используется TINKOFF_TOKEN.
+TINKOFF_MARKET_TOKEN: str = os.environ.get("TINKOFF_MARKET_TOKEN") or TINKOFF_TOKEN
 
 # ─── База данных ──────────────────────────────────────────────────────────────
 MYSQL_URL: str = os.environ["MYSQL_URL"]

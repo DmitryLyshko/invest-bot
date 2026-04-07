@@ -94,8 +94,7 @@ class StreamHandler:
 
     def _run_stream(self) -> None:
         """Внутренний цикл стрима — читает события и диспатчит их."""
-        client_cls = SandboxClient if settings.USE_SANDBOX else Client
-        with client_cls(settings.TINKOFF_TOKEN) as client:
+        with Client(settings.TINKOFF_MARKET_TOKEN) as client:
             for market_data in client.market_data_stream.market_data_stream(
                 self._request_iterator()
             ):
