@@ -101,6 +101,7 @@ class StreamHandler:
                 if not self._running:
                     break
 
+                logger.debug(f"Стрим событие: {market_data}")
                 if market_data.orderbook:
                     try:
                         normalized = normalize_orderbook(market_data.orderbook)
