@@ -23,6 +23,7 @@ from tinkoff.invest import Client
 from tinkoff.invest.sandbox.client import SandboxClient
 
 from trading_bot.config import settings
+from trading_bot.core.data.data_recorder import DataRecorder
 from trading_bot.core.data.stream_handler import StreamHandler
 from trading_bot.core.execution.order_manager import OrderManager
 from trading_bot.core.execution.position_manager import PositionManager
@@ -127,18 +128,24 @@ def build_components(ticker: str, instrument_params: dict, account_id: str):
     return strategy, order_manager, position_manager
 
 
-def make_event_handlers(strategy: ComboStrategy, position_manager: PositionManager):
+def make_event_handlers(
+    strategy: ComboStrategy,
+    position_manager: PositionManager,
+    recorder: DataRecorder,
+):
     """
     Создать callback-функции для стрима.
     Возвращает (on_orderbook, on_trade).
     """
     def on_orderbook(data: dict) -> None:
+        recorder.on_orderbook(data)
         strategy.on_orderbook(data)
         sig = strategy.get_signal()
         if sig is not None:
             position_manager.on_signal(sig)
 
     def on_trade(data: dict) -> None:
+        recorder.on_trade(data)
         strategy.on_trade(data)
         position_manager.update_market_price(data["price"])
         # После on_trade тоже проверяем сигнал (PrintDetector мог сработать)
@@ -181,7 +188,8 @@ def main() -> None:
     params = instruments[ticker]
 
     strategy, order_manager, position_manager = build_components(ticker, params, account_id)
-    on_orderbook, on_trade = make_event_handlers(strategy, position_manager)
+    recorder = DataRecorder(figi=params["figi"])
+    on_orderbook, on_trade = make_event_handlers(strategy, position_manager, recorder)
 
     # ── Стрим рыночных данных ─────────────────────────────────────────────────
     stream = StreamHandler(

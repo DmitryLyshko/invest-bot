@@ -41,3 +41,10 @@ INSTRUMENTS_CONFIG_PATH: Path = BASE_DIR / "trading_bot" / "config" / "instrumen
 # ─── Режим работы ─────────────────────────────────────────────────────────────
 # SANDBOX=true — использовать песочницу T-Invest (тестовые ордера)
 USE_SANDBOX: bool = os.environ.get("SANDBOX", "false").lower() == "true"
+
+# ─── Запись рыночных данных для бэктеста ──────────────────────────────────────
+# RECORD_MARKET_DATA=true — писать снапшоты стакана и тики сделок в БД
+# Внимание: SBER генерирует ~150-300k строк стакана в день
+RECORD_MARKET_DATA: bool = os.environ.get("RECORD_MARKET_DATA", "false").lower() == "true"
+# Записывать каждый N-й снапшот стакана (1 = каждый, 5 = каждый 5-й)
+RECORD_ORDERBOOK_INTERVAL: int = int(os.environ.get("RECORD_ORDERBOOK_INTERVAL", "1"))

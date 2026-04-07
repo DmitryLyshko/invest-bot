@@ -5,7 +5,7 @@ from datetime import datetime
 
 from sqlalchemy import (
     BigInteger, Boolean, Column, DateTime, Float, ForeignKey,
-    Integer, String, Text, UniqueConstraint,
+    Index, Integer, String, Text, UniqueConstraint,
 )
 from sqlalchemy.orm import DeclarativeBase, relationship
 
@@ -183,3 +183,34 @@ class BotState(Base):
     id = Column(Integer, primary_key=True, default=1)
     bot_active = Column(Boolean, default=False, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class MarketOrderbook(Base):
+    """Снапшоты стакана для бэктеста. Запись включается через RECORD_MARKET_DATA=true."""
+    __tablename__ = "market_orderbooks"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    figi = Column(String(50), nullable=False)
+    bids = Column(Text, nullable=False)  # JSON: [[price, qty], ...]
+    asks = Column(Text, nullable=False)  # JSON: [[price, qty], ...]
+    recorded_at = Column(DateTime, nullable=False)
+
+    __table_args__ = (
+        Index("ix_market_orderbooks_figi_time", "figi", "recorded_at"),
+    )
+
+
+class MarketTradeTick(Base):
+    """Тиковые сделки для бэктеста. Запись включается через RECORD_MARKET_DATA=true."""
+    __tablename__ = "market_trade_ticks"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    figi = Column(String(50), nullable=False)
+    price = Column(Float, nullable=False)
+    quantity = Column(Integer, nullable=False)
+    direction = Column(String(10), nullable=False)
+    recorded_at = Column(DateTime, nullable=False)
+
+    __table_args__ = (
+        Index("ix_market_trade_ticks_figi_time", "figi", "recorded_at"),
+    )

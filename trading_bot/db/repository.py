@@ -13,7 +13,8 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from trading_bot.config import settings
 from trading_bot.db.models import (
-    Base, BotLog, BotState, Instrument, Order, Signal, Trade, User,
+    Base, BotLog, BotState, Instrument, MarketOrderbook, MarketTradeTick,
+    Order, Signal, Trade, User,
 )
 
 logger = logging.getLogger(__name__)
@@ -451,3 +452,91 @@ def update_last_login(user_id: int) -> None:
         if user:
             user.last_login = datetime.utcnow()
             session.commit()
+
+
+# ─── Market data (backtest recording) ────────────────────────────────────────
+
+def save_orderbook_snapshot(
+    figi: str,
+    bids: list,
+    asks: list,
+    timestamp: datetime,
+) -> None:
+    import json
+    with get_session() as session:
+        row = MarketOrderbook(
+            figi=figi,
+            bids=json.dumps(bids),
+            asks=json.dumps(asks),
+            recorded_at=timestamp,
+        )
+        session.add(row)
+        session.commit()
+
+
+def save_trade_tick(
+    figi: str,
+    price: float,
+    quantity: int,
+    direction: str,
+    timestamp: datetime,
+) -> None:
+    with get_session() as session:
+        row = MarketTradeTick(
+            figi=figi,
+            price=price,
+            quantity=quantity,
+            direction=direction,
+            recorded_at=timestamp,
+        )
+        session.add(row)
+        session.commit()
+
+
+def get_orderbook_snapshots(
+    figi: str,
+    date_from: datetime,
+    date_to: datetime,
+) -> List[MarketOrderbook]:
+    with get_session() as session:
+        return (
+            session.query(MarketOrderbook)
+            .filter(
+                MarketOrderbook.figi == figi,
+                MarketOrderbook.recorded_at >= date_from,
+                MarketOrderbook.recorded_at < date_to,
+            )
+            .order_by(MarketOrderbook.recorded_at)
+            .all()
+        )
+
+
+def get_trade_ticks(
+    figi: str,
+    date_from: datetime,
+    date_to: datetime,
+) -> List[MarketTradeTick]:
+    with get_session() as session:
+        return (
+            session.query(MarketTradeTick)
+            .filter(
+                MarketTradeTick.figi == figi,
+                MarketTradeTick.recorded_at >= date_from,
+                MarketTradeTick.recorded_at < date_to,
+            )
+            .order_by(MarketTradeTick.recorded_at)
+            .all()
+        )
+
+
+def get_recorded_dates(figi: str) -> List[str]:
+    """Список дат (UTC), для которых есть данные стакана."""
+    with get_session() as session:
+        rows = (
+            session.query(func.date(MarketOrderbook.recorded_at).label("d"))
+            .filter(MarketOrderbook.figi == figi)
+            .group_by(func.date(MarketOrderbook.recorded_at))
+            .order_by(func.date(MarketOrderbook.recorded_at))
+            .all()
+        )
+        return [str(r.d) for r in rows]
