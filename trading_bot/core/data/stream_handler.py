@@ -9,7 +9,7 @@
 """
 import logging
 import time
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict
 
 from tinkoff.invest import (
     Client,
@@ -55,47 +55,48 @@ class StreamHandler:
         Блокирующий вызов — должен запускаться в отдельном потоке.
         """
         self._running = True
-        backoff = 1  # начальная задержка переподключения в секундах
+        backoff = 1
 
         while self._running:
             try:
                 logger.info(f"Подключение к стриму: figi={self.figi}")
                 self._run_stream()
-                backoff = 1  # успешный запуск сбрасывает backoff
+                backoff = 1
             except Exception as e:
                 if not self._running:
                     break
                 logger.error(f"Ошибка стрима: {e}. Переподключение через {backoff}с...")
                 time.sleep(backoff)
-                backoff = min(backoff * 2, 60)  # максимум 60 секунд
+                backoff = min(backoff * 2, 60)
 
     def stop(self) -> None:
         """Остановить стрим."""
         self._running = False
         logger.info(f"Стрим остановлен: figi={self.figi}")
 
+    def _request_iterator(self):
+        """Генератор запросов подписки для market_data_stream."""
+        yield MarketDataRequest(
+            subscribe_order_book_request=SubscribeOrderBookRequest(
+                subscription_action=SubscriptionAction.SUBSCRIPTION_ACTION_SUBSCRIBE,
+                instruments=[OrderBookInstrument(figi=self.figi, depth=self.orderbook_depth)],
+            )
+        )
+        yield MarketDataRequest(
+            subscribe_trades_request=SubscribeTradesRequest(
+                subscription_action=SubscriptionAction.SUBSCRIPTION_ACTION_SUBSCRIBE,
+                instruments=[TradeInstrument(figi=self.figi)],
+            )
+        )
+        while self._running:
+            time.sleep(1)
+
     def _run_stream(self) -> None:
         """Внутренний цикл стрима — читает события и диспатчит их."""
         with Client(settings.TINKOFF_TOKEN) as client:
-            stream = client.create_market_data_stream()
-
-            # Подписываемся на стакан
-            stream.subscribe_order_book(
-                instruments=[
-                    OrderBookInstrument(figi=self.figi, depth=self.orderbook_depth)
-                ],
-                subscription_action=SubscriptionAction.SUBSCRIPTION_ACTION_SUBSCRIBE,
-            )
-
-            # Подписываемся на поток сделок
-            stream.subscribe_trades(
-                instruments=[TradeInstrument(figi=self.figi)],
-                subscription_action=SubscriptionAction.SUBSCRIPTION_ACTION_SUBSCRIBE,
-            )
-
-            logger.info(f"Стрим активен: figi={self.figi}")
-
-            for market_data in stream:
+            for market_data in client.market_data_stream.market_data_stream(
+                self._request_iterator()
+            ):
                 if not self._running:
                     break
 
