@@ -20,8 +20,6 @@ from tinkoff.invest import (
     SubscriptionAction,
     TradeInstrument,
 )
-from tinkoff.invest.market_data_stream.market_data_stream_service import MarketDataStreamService
-
 from trading_bot.config import settings
 from trading_bot.core.data.market_data import normalize_orderbook, normalize_trade
 
@@ -79,7 +77,7 @@ class StreamHandler:
     def _run_stream(self) -> None:
         """Внутренний цикл стрима — читает события и диспатчит их."""
         with Client(settings.TINKOFF_TOKEN) as client:
-            stream: MarketDataStreamService = client.create_market_data_stream()
+            stream = client.create_market_data_stream()
 
             # Подписываемся на стакан
             stream.subscribe_order_book(
