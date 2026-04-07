@@ -20,6 +20,7 @@ from tinkoff.invest import (
     SubscriptionAction,
     TradeInstrument,
 )
+from tinkoff.invest.sandbox.client import SandboxClient
 from trading_bot.config import settings
 from trading_bot.core.data.market_data import normalize_orderbook, normalize_trade
 
@@ -93,7 +94,8 @@ class StreamHandler:
 
     def _run_stream(self) -> None:
         """Внутренний цикл стрима — читает события и диспатчит их."""
-        with Client(settings.TINKOFF_TOKEN) as client:
+        client_cls = SandboxClient if settings.USE_SANDBOX else Client
+        with client_cls(settings.TINKOFF_TOKEN) as client:
             for market_data in client.market_data_stream.market_data_stream(
                 self._request_iterator()
             ):
