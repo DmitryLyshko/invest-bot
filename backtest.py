@@ -67,12 +67,13 @@ class BacktestTrade:
 
 @dataclass
 class BacktestPosition:
-    __slots__ = ("direction", "entry_price", "quantity_lots", "open_at", "current_price")
+    __slots__ = ("direction", "entry_price", "quantity_lots", "open_at", "current_price", "stop_at_breakeven")
     direction: str
     entry_price: float
     quantity_lots: int
     open_at: datetime
     current_price: float
+    stop_at_breakeven: bool = False
 
 
 class BacktestPositionManager:
@@ -97,6 +98,8 @@ class BacktestPositionManager:
         self._lot_size: int = config.get("lot_size", 1)
         self._max_position_lots: int = config.get("max_position_lots", 1)
         self._min_hold_seconds: int = config.get("min_hold_seconds", 0)
+        breakeven_ticks: int = config.get("breakeven_ticks", 0)
+        self._breakeven_distance: float = breakeven_ticks * tick_size if breakeven_ticks > 0 else 0.0
 
     def set_strategy(self, strategy: ComboStrategy) -> None:
         self._strategy = strategy
@@ -139,7 +142,17 @@ class BacktestPositionManager:
             loss_distance = price - pos.entry_price
             gain_distance = pos.entry_price - price
 
-        if loss_distance >= self._stop_distance:
+        # Активируем безубыток: стоп переносится на цену входа
+        if self._breakeven_distance > 0 and not pos.stop_at_breakeven:
+            if gain_distance >= self._breakeven_distance:
+                pos.stop_at_breakeven = True
+
+        # Стоп-лосс (или безубыток если активирован)
+        if pos.stop_at_breakeven:
+            if loss_distance > 0:  # цена вернулась за точку входа
+                self._close(price, timestamp, "breakeven_stop")
+                return
+        elif loss_distance >= self._stop_distance:
             self._close(price, timestamp, "stop_loss")
             return
 
@@ -394,7 +407,8 @@ def main():
         print("\nУкажи --date или --date-from и --date-to")
         sys.exit(1)
 
-    trades = run_backtest(config, figi, date_from, date_to, args.commission)
+    commission = args.commission if args.commission != 0.0005 else config.get("commission_rate", 0.0005)
+    trades = run_backtest(config, figi, date_from, date_to, commission)
     if trades is not None:
         print_results(trades, config)
 

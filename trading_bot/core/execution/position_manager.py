@@ -35,6 +35,8 @@ class OpenPosition:
     signal_id: Optional[int] = None
     # Текущая рыночная цена (обновляется из стрима)
     current_price: float = 0.0
+    # Флаг: стоп перенесён на цену входа (безубыток активирован)
+    stop_at_breakeven: bool = False
 
     @property
     def unrealized_pnl(self) -> float:
@@ -329,27 +331,58 @@ class PositionManager:
             loss_distance = current_price - pos.entry_price
             gain_distance = pos.entry_price - current_price
 
+        # ── Безубыток ────────────────────────────────────────────────────────
+        breakeven_ticks = self.params.get("breakeven_ticks", 0)
+        if breakeven_ticks > 0 and not pos.stop_at_breakeven:
+            if gain_distance >= breakeven_ticks * tick_size:
+                pos.stop_at_breakeven = True
+                logger.info(
+                    f"БЕЗУБЫТОК активирован: цена прошла {breakeven_ticks} тиков в пользу позиции"
+                )
+
         # ── Стоп-лосс ────────────────────────────────────────────────────────
-        stop_ticks = self.params.get("stop_ticks", 30)
-        stop_distance = stop_ticks * tick_size
-        if loss_distance >= stop_distance:
-            logger.info(
-                f"СТОП-ЛОСС: движение против позиции {loss_distance:.4f} >= {stop_distance:.4f} "
-                f"({stop_ticks} тиков)"
-            )
-            from trading_bot.core.strategy.base_strategy import Signal, SignalType, SignalReason
-            sl_signal = Signal(signal_type=SignalType.EXIT, reason=SignalReason.STOP_LOSS)
-            db_signal = repository.save_signal(
-                instrument_id=self.instrument_id,
-                signal_type="exit",
-                ofi_value=self.strategy.current_ofi or 0.0,
-                print_volume=None,
-                print_side=None,
-                reason="stop_loss",
-                acted_on=True,
-            )
-            self._close_position(sl_signal, db_signal.id, exit_reason="stop_loss")
-            return
+        from trading_bot.core.strategy.base_strategy import Signal, SignalType, SignalReason
+        if pos.stop_at_breakeven:
+            if loss_distance > 0:
+                logger.info(f"БЕЗУБЫТОК сработал: цена вернулась за точку входа {pos.entry_price:.2f}")
+                db_signal = repository.save_signal(
+                    instrument_id=self.instrument_id,
+                    signal_type="exit",
+                    ofi_value=self.strategy.current_ofi or 0.0,
+                    print_volume=None,
+                    print_side=None,
+                    reason="breakeven_stop",
+                    acted_on=True,
+                )
+                self._close_position(
+                    Signal(signal_type=SignalType.EXIT, reason=SignalReason.STOP_LOSS),
+                    db_signal.id,
+                    exit_reason="breakeven_stop",
+                )
+                return
+        else:
+            stop_ticks = self.params.get("stop_ticks", 30)
+            stop_distance = stop_ticks * tick_size
+            if loss_distance >= stop_distance:
+                logger.info(
+                    f"СТОП-ЛОСС: движение против позиции {loss_distance:.4f} >= {stop_distance:.4f} "
+                    f"({stop_ticks} тиков)"
+                )
+                db_signal = repository.save_signal(
+                    instrument_id=self.instrument_id,
+                    signal_type="exit",
+                    ofi_value=self.strategy.current_ofi or 0.0,
+                    print_volume=None,
+                    print_side=None,
+                    reason="stop_loss",
+                    acted_on=True,
+                )
+                self._close_position(
+                    Signal(signal_type=SignalType.EXIT, reason=SignalReason.STOP_LOSS),
+                    db_signal.id,
+                    exit_reason="stop_loss",
+                )
+                return
 
         # ── Тейк-профит ──────────────────────────────────────────────────────
         take_profit_ticks = self.params.get("take_profit_ticks", 0)
@@ -360,7 +393,6 @@ class PositionManager:
                     f"ТЕЙК-ПРОФИТ: движение в пользу позиции {gain_distance:.4f} >= {take_distance:.4f} "
                     f"({take_profit_ticks} тиков)"
                 )
-                from trading_bot.core.strategy.base_strategy import Signal, SignalType, SignalReason
                 tp_signal = Signal(signal_type=SignalType.EXIT, reason=SignalReason.TAKE_PROFIT)
                 db_signal = repository.save_signal(
                     instrument_id=self.instrument_id,
