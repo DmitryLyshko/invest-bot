@@ -182,10 +182,11 @@ def run_backtest(config: dict, figi: str, date_from: datetime, date_to: datetime
 
     print(f"Загружено: {len(orderbooks)} снапшотов стакана, {len(trades_raw)} тиков сделок")
 
-    # Объединяем события в единый таймлайн
+    # Объединяем события в единый таймлайн.
+    # JSON bids/asks парсим здесь один раз, а не 111К раз внутри цикла.
     events = []
     for ob in orderbooks:
-        events.append(("ob", ob.recorded_at, ob))
+        events.append(("ob", ob.recorded_at, json.loads(ob.bids), json.loads(ob.asks)))
     for t in trades_raw:
         events.append(("trade", t.recorded_at, t))
     events.sort(key=lambda x: x[1])
@@ -198,25 +199,23 @@ def run_backtest(config: dict, figi: str, date_from: datetime, date_to: datetime
     last_price = 0.0
     last_timeout_check = date_from
 
-    for event_type, ts, data in events:
+    for event in events:
+        event_type, ts = event[0], event[1]
         # Проверяем тайм-аут раз в минуту
         if (ts - last_timeout_check).total_seconds() >= 60:
             pm.check_timeout(ts)
             last_timeout_check = ts
 
         if event_type == "ob":
-            ob_data = {
-                "figi": figi,
-                "bids": json.loads(data.bids),
-                "asks": json.loads(data.asks),
-                "time": data.recorded_at,
-            }
+            bids, asks = event[2], event[3]
+            ob_data = {"figi": figi, "bids": bids, "asks": asks, "time": ts}
             strategy.on_orderbook(ob_data)
             sig = strategy.get_signal()
             if sig is not None:
                 pm.on_signal(sig, last_price)
 
         elif event_type == "trade":
+            data = event[2]
             trade_data = {
                 "figi": figi,
                 "price": data.price,

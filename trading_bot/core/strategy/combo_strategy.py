@@ -73,9 +73,25 @@ class ComboStrategy(BaseStrategy):
         # новой позиции. Выход разрешён только при достижении min_ofi_confirmations.
         self._ofi_exit_confirmations: int = 0
 
+        # Кэшированные торговые часы (парсятся один раз, а не на каждом тике стакана)
+        self._trading_start: Optional[time] = None
+        self._trading_end: Optional[time] = None
+        self._cache_trading_hours()
+
+    def _cache_trading_hours(self) -> None:
+        """Парсим строки торговых часов один раз и сохраняем объекты time."""
+        hours = self.params.get("trading_hours", {})
+        start_str = hours.get("start", "10:05")
+        end_str = hours.get("end", "18:30")
+        start_h, start_m = map(int, start_str.split(":"))
+        end_h, end_m = map(int, end_str.split(":"))
+        self._trading_start = time(start_h, start_m)
+        self._trading_end = time(end_h, end_m)
+
     def load_params(self, instrument_config: Dict[str, Any]) -> None:
         """Перезагрузить параметры и пересоздать компоненты."""
         super().load_params(instrument_config)
+        self._cache_trading_hours()
         # Если компоненты уже существуют — обновляем их параметры
         if hasattr(self, "ofi_calc"):
             self.ofi_calc = OFICalculator(
@@ -309,17 +325,7 @@ class ComboStrategy(BaseStrategy):
         moscow_time = timestamp + timedelta(hours=3)
         current_time = moscow_time.time()
 
-        hours = self.params.get("trading_hours", {})
-        start_str = hours.get("start", "10:05")
-        end_str = hours.get("end", "18:30")
-
-        start_h, start_m = map(int, start_str.split(":"))
-        end_h, end_m = map(int, end_str.split(":"))
-
-        start_time = time(start_h, start_m)
-        end_time = time(end_h, end_m)
-
-        if not (start_time <= current_time <= end_time):
+        if not (self._trading_start <= current_time <= self._trading_end):
             return False
 
         # Пропускаем первые N минут после открытия — высокая волатильность

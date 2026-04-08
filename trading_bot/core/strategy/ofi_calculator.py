@@ -13,6 +13,7 @@ OFI — это метрика, показывающая, кто агрессив
   ~0   = баланс / неопределённость
 """
 import logging
+import math
 from collections import deque
 from typing import Any, Dict, Deque, List, Optional, Tuple
 
@@ -165,7 +166,6 @@ class OFICalculator:
         типичного дневного объёма SBER. При работе с другими инструментами
         можно вынести в конфиг.
         """
-        import math
         scale = 1000.0
         return math.tanh(raw_ofi / scale)
 

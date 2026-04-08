@@ -15,7 +15,6 @@
 выбросам — крупные принты не "загрязняют" базовую метрику.
 """
 import logging
-import statistics
 from collections import deque
 from dataclasses import dataclass
 from datetime import datetime
@@ -85,18 +84,20 @@ class PrintDetector:
         """
         # Сначала добавляем объём в окно — медиана всегда считается по историческим данным,
         # не включая текущую сделку. Это предотвращает "самоссылку".
-        current_volumes = list(self._volume_window)
+        n = len(self._volume_window)
 
         # Добавляем текущий объём в окно для следующих расчётов
         self._volume_window.append(volume)
 
         # Если окно ещё не заполнено до минимального порога — сигнал ненадёжен
-        if len(current_volumes) < max(10, self.print_window // 10):
+        if n < max(10, self.print_window // 10):
             # Ждём накопления хотя бы 10% окна или минимум 10 точек
             return None
 
-        # Считаем медиану объёмов в окне
-        median_volume = statistics.median(current_volumes)
+        # Считаем медиану: sorted() напрямую из deque — без промежуточного list()
+        sorted_vols = sorted(self._volume_window)
+        mid = n // 2
+        median_volume = sorted_vols[mid] if n % 2 else (sorted_vols[mid - 1] + sorted_vols[mid]) / 2
 
         # Сравниваем объём текущей сделки с медианой
         if median_volume <= 0:
@@ -172,7 +173,10 @@ class PrintDetector:
         """Текущая медиана объёмов (для отладки и мониторинга)."""
         if len(self._volume_window) < 2:
             return None
-        return statistics.median(self._volume_window)
+        vols = sorted(self._volume_window)
+        n = len(vols)
+        mid = n // 2
+        return vols[mid] if n % 2 else (vols[mid - 1] + vols[mid]) / 2
 
     def reset(self) -> None:
         """Сбросить состояние — используется при переподключении стрима."""
