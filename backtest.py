@@ -67,12 +67,11 @@ class BacktestTrade:
 
 @dataclass
 class BacktestPosition:
-    __slots__ = ("direction", "entry_price", "quantity_lots", "open_at", "current_price", "stop_at_breakeven")
     direction: str
     entry_price: float
     quantity_lots: int
     open_at: datetime
-    current_price: float
+    current_price: float = 0.0
     stop_at_breakeven: bool = False
 
 
