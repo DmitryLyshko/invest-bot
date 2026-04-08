@@ -64,6 +64,9 @@ class ComboStrategy(BaseStrategy):
         # Время последнего сигнала для соблюдения cooldown
         self._last_signal_time: Optional[datetime] = None
 
+        # Время последнего закрытия позиции для post_close_cooldown
+        self._last_close_time: Optional[datetime] = None
+
         # Последнее рассчитанное OFI (для логгирования и отладки)
         self._current_ofi: Optional[float] = None
 
@@ -340,15 +343,23 @@ class ComboStrategy(BaseStrategy):
 
     def _is_cooldown_passed(self, timestamp: datetime) -> bool:
         """
-        Проверить, прошёл ли cooldown с последнего сигнала.
-        Cooldown предотвращает "перегрев" — слишком частые входы в рынок.
+        Проверить, прошёл ли cooldown.
+        Два независимых кулдауна:
+          1. cooldown_seconds — от последнего входа (предотвращает частые входы)
+          2. post_close_cooldown_seconds — от последнего закрытия (предотвращает мгновенный флип)
         """
-        if self._last_signal_time is None:
-            return True
+        if self._last_signal_time is not None:
+            cooldown_seconds = self.params.get("cooldown_seconds", 60)
+            if (timestamp - self._last_signal_time).total_seconds() < cooldown_seconds:
+                return False
 
-        cooldown_seconds = self.params.get("cooldown_seconds", 60)
-        elapsed = (timestamp - self._last_signal_time).total_seconds()
-        return elapsed >= cooldown_seconds
+        if self._last_close_time is not None:
+            post_close_cooldown = self.params.get("post_close_cooldown_seconds", 0)
+            if post_close_cooldown > 0:
+                if (timestamp - self._last_close_time).total_seconds() < post_close_cooldown:
+                    return False
+
+        return True
 
     def get_signal(self) -> Optional[Signal]:
         """
@@ -359,18 +370,23 @@ class ComboStrategy(BaseStrategy):
         self._pending_signal = None
         return signal
 
-    def set_position(self, direction: Optional[str]) -> None:
+    def set_position(self, direction: Optional[str], close_time: Optional[datetime] = None) -> None:
         """
         Сообщить стратегии о текущей позиции.
         Вызывается из position_manager при открытии/закрытии позиции.
 
         direction: None / "long" / "short"
+        close_time: время закрытия позиции (передаётся при direction=None)
         """
+        prev_direction = self._open_position_direction
         self._open_position_direction = direction
         # Сбрасываем счётчик подтверждений при любом изменении позиции.
         # При открытии новой позиции — старый счётчик неактуален.
         # При закрытии — тем более.
         self._ofi_exit_confirmations = 0
+        # Запоминаем время закрытия для post_close_cooldown
+        if prev_direction is not None and direction is None:
+            self._last_close_time = close_time or datetime.utcnow()
         logger.debug(f"Стратегия: позиция обновлена → {direction}")
 
     @property
@@ -387,3 +403,4 @@ class ComboStrategy(BaseStrategy):
         self._last_signal_time = None
         self._current_ofi = None
         self._ofi_exit_confirmations = 0
+        self._last_close_time = None

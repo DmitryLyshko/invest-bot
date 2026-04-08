@@ -276,7 +276,7 @@ class PositionManager:
 
         # Сбрасываем позицию
         self._position = None
-        self.strategy.set_position(None)
+        self.strategy.set_position(None, close_time=close_at)
 
     def update_market_price(self, price: float) -> None:
         """

@@ -195,7 +195,7 @@ class BacktestPositionManager:
         ))
         self._position = None
         if self._strategy:
-            self._strategy.set_position(None)
+            self._strategy.set_position(None, close_time=close_at)
 
     @property
     def has_position(self) -> bool:
@@ -366,6 +366,8 @@ def main():
     parser.add_argument("--stop-ticks", type=int, help="Стоп-лосс в тиках")
     parser.add_argument("--take-profit-ticks", type=int, help="Тейк-профит в тиках")
     parser.add_argument("--min-ofi-confirmations", type=int, help="Подтверждений OFI для выхода")
+    parser.add_argument("--post-close-cooldown", type=int, help="Кулдаун после закрытия позиции (сек)")
+    parser.add_argument("--min-profit-ticks", type=int, help="Мин. тиков прибыли для выхода по OFI")
     parser.add_argument("--commission", type=float, default=0.0005,
                         help="Комиссия за сторону (default: 0.0005 = 0.05%%)")
     parser.add_argument("--list-dates", action="store_true", help="Показать даты с данными")
@@ -393,6 +395,10 @@ def main():
         config["take_profit_ticks"] = args.take_profit_ticks
     if args.min_ofi_confirmations is not None:
         config["min_ofi_confirmations"] = args.min_ofi_confirmations
+    if args.post_close_cooldown is not None:
+        config["post_close_cooldown_seconds"] = args.post_close_cooldown
+    if args.min_profit_ticks is not None:
+        config["min_profit_ticks_for_ofi_exit"] = args.min_profit_ticks
 
     figi = config["figi"]
 
