@@ -511,6 +511,32 @@ def get_orderbook_snapshots(
         )
 
 
+def iter_orderbook_snapshots(
+    figi: str,
+    date_from: datetime,
+    date_to: datetime,
+    chunk_size: int = 2000,
+) -> Generator[tuple, None, None]:
+    """Потоковое чтение стакана — не грузит всё в RAM сразу."""
+    with get_session() as session:
+        q = (
+            session.query(
+                MarketOrderbook.recorded_at,
+                MarketOrderbook.bids,
+                MarketOrderbook.asks,
+            )
+            .filter(
+                MarketOrderbook.figi == figi,
+                MarketOrderbook.recorded_at >= date_from,
+                MarketOrderbook.recorded_at < date_to,
+            )
+            .order_by(MarketOrderbook.recorded_at)
+            .yield_per(chunk_size)
+        )
+        for row in q:
+            yield row.recorded_at, row.bids, row.asks
+
+
 def get_trade_ticks(
     figi: str,
     date_from: datetime,
@@ -527,6 +553,33 @@ def get_trade_ticks(
             .order_by(MarketTradeTick.recorded_at)
             .all()
         )
+
+
+def iter_trade_ticks(
+    figi: str,
+    date_from: datetime,
+    date_to: datetime,
+    chunk_size: int = 5000,
+) -> Generator[tuple, None, None]:
+    """Потоковое чтение сделок — не грузит всё в RAM сразу."""
+    with get_session() as session:
+        q = (
+            session.query(
+                MarketTradeTick.recorded_at,
+                MarketTradeTick.price,
+                MarketTradeTick.quantity,
+                MarketTradeTick.direction,
+            )
+            .filter(
+                MarketTradeTick.figi == figi,
+                MarketTradeTick.recorded_at >= date_from,
+                MarketTradeTick.recorded_at < date_to,
+            )
+            .order_by(MarketTradeTick.recorded_at)
+            .yield_per(chunk_size)
+        )
+        for row in q:
+            yield row.recorded_at, row.price, row.quantity, row.direction
 
 
 def get_recorded_dates(figi: str) -> List[str]:

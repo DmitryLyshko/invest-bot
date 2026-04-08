@@ -10,14 +10,23 @@
 Любой из них можно переопределить через аргументы командной строки.
 """
 import argparse
-import json
+import heapq
 import sys
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import List, Optional
+from typing import Generator, List, Optional
 
 import yaml
+
+try:
+    import orjson
+    def _loads(s: str):
+        return orjson.loads(s)
+except ImportError:
+    import json
+    def _loads(s: str):
+        return json.loads(s)
 
 # Добавляем корень проекта в путь
 sys.path.insert(0, str(Path(__file__).parent))
@@ -58,11 +67,12 @@ class BacktestTrade:
 
 @dataclass
 class BacktestPosition:
+    __slots__ = ("direction", "entry_price", "quantity_lots", "open_at", "current_price")
     direction: str
     entry_price: float
     quantity_lots: int
     open_at: datetime
-    current_price: float = 0.0
+    current_price: float
 
 
 class BacktestPositionManager:
@@ -73,10 +83,20 @@ class BacktestPositionManager:
 
     def __init__(self, config: dict, commission_rate: float = 0.0005) -> None:
         self.config = config
-        self.commission_rate = commission_rate  # 0.05% per side = 0.1% round trip
+        self.commission_rate = commission_rate
         self._position: Optional[BacktestPosition] = None
         self.trades: List[BacktestTrade] = []
         self._strategy: Optional[ComboStrategy] = None
+
+        # Предвычисляем константы — убираем dict.get() из горячего цикла
+        tick_size: float = config.get("tick_size", 0.01)
+        self._stop_distance: float = config.get("stop_ticks", 30) * tick_size
+        tp_ticks: int = config.get("take_profit_ticks", 0)
+        self._tp_distance: float = tp_ticks * tick_size if tp_ticks > 0 else 0.0
+        self._max_hold_seconds: int = config.get("max_hold_minutes", 60) * 60
+        self._lot_size: int = config.get("lot_size", 1)
+        self._max_position_lots: int = config.get("max_position_lots", 1)
+        self._min_hold_seconds: int = config.get("min_hold_seconds", 0)
 
     def set_strategy(self, strategy: ComboStrategy) -> None:
         self._strategy = strategy
@@ -89,7 +109,7 @@ class BacktestPositionManager:
             self._position = BacktestPosition(
                 direction=direction,
                 entry_price=current_price,
-                quantity_lots=self.config.get("max_position_lots", 1),
+                quantity_lots=self._max_position_lots,
                 open_at=signal.timestamp,
                 current_price=current_price,
             )
@@ -99,21 +119,18 @@ class BacktestPositionManager:
         elif signal.signal_type == SignalType.EXIT:
             if self._position is None:
                 return
-            # Проверяем min_hold_seconds для выхода по OFI
             if signal.reason == SignalReason.OFI_REVERSED:
-                min_hold = self.config.get("min_hold_seconds", 0)
                 held = (signal.timestamp - self._position.open_at).total_seconds()
-                if held < min_hold:
+                if held < self._min_hold_seconds:
                     return
             self._close(current_price, signal.timestamp, signal.reason.value)
 
     def update_market_price(self, price: float, timestamp: datetime) -> None:
-        if self._position is None:
+        pos = self._position
+        if pos is None:
             return
 
-        self._position.current_price = price
-        tick_size = self.config.get("tick_size", 0.01)
-        pos = self._position
+        pos.current_price = price
 
         if pos.direction == "long":
             loss_distance = pos.entry_price - price
@@ -122,42 +139,36 @@ class BacktestPositionManager:
             loss_distance = price - pos.entry_price
             gain_distance = pos.entry_price - price
 
-        # Стоп-лосс
-        stop_distance = self.config.get("stop_ticks", 30) * tick_size
-        if loss_distance >= stop_distance:
+        if loss_distance >= self._stop_distance:
             self._close(price, timestamp, "stop_loss")
             return
 
-        # Тейк-профит
-        tp_ticks = self.config.get("take_profit_ticks", 0)
-        if tp_ticks > 0 and gain_distance >= tp_ticks * tick_size:
+        if self._tp_distance > 0 and gain_distance >= self._tp_distance:
             self._close(price, timestamp, "take_profit")
 
     def check_timeout(self, timestamp: datetime) -> None:
-        if self._position is None:
+        pos = self._position
+        if pos is None:
             return
-        max_hold = self.config.get("max_hold_minutes", 60) * 60
-        if (timestamp - self._position.open_at).total_seconds() >= max_hold:
-            self._close(self._position.current_price, timestamp, "timeout")
+        if (timestamp - pos.open_at).total_seconds() >= self._max_hold_seconds:
+            self._close(pos.current_price, timestamp, "timeout")
 
     def _close(self, exit_price: float, close_at: datetime, reason: str) -> None:
         pos = self._position
-        lot_size = self.config.get("lot_size", 1)
-        position_value = exit_price * pos.quantity_lots * lot_size
+        position_value = exit_price * pos.quantity_lots * self._lot_size
         commission = position_value * self.commission_rate * 2  # вход + выход
 
-        trade = BacktestTrade(
+        self.trades.append(BacktestTrade(
             direction=pos.direction,
             entry_price=pos.entry_price,
             exit_price=exit_price,
             quantity_lots=pos.quantity_lots,
-            lot_size=lot_size,
+            lot_size=self._lot_size,
             open_at=pos.open_at,
             close_at=close_at,
             exit_reason=reason,
             commission_rub=round(commission, 4),
-        )
-        self.trades.append(trade)
+        ))
         self._position = None
         if self._strategy:
             self._strategy.set_position(None)
@@ -167,29 +178,24 @@ class BacktestPositionManager:
         return self._position is not None
 
 
+# ─── Генераторы событий ───────────────────────────────────────────────────────
+
+def _ob_events(figi: str, date_from: datetime, date_to: datetime) -> Generator:
+    """Генератор событий стакана: (ts, 'ob', bids_json, asks_json)."""
+    for ts, bids_json, asks_json in repository.iter_orderbook_snapshots(figi, date_from, date_to):
+        yield ts, "ob", bids_json, asks_json
+
+
+def _trade_events(figi: str, date_from: datetime, date_to: datetime) -> Generator:
+    """Генератор событий сделок: (ts, 'trade', price, quantity, direction)."""
+    for ts, price, quantity, direction in repository.iter_trade_ticks(figi, date_from, date_to):
+        yield ts, "trade", price, quantity, direction
+
+
 # ─── Бэктест ──────────────────────────────────────────────────────────────────
 
 def run_backtest(config: dict, figi: str, date_from: datetime, date_to: datetime, commission_rate: float):
     print(f"\nЗагрузка данных {figi} с {date_from.date()} по {(date_to - timedelta(seconds=1)).date()}...")
-
-    orderbooks = repository.get_orderbook_snapshots(figi, date_from, date_to)
-    trades_raw = repository.get_trade_ticks(figi, date_from, date_to)
-
-    if not orderbooks:
-        print("Нет данных стакана за указанный период.")
-        print("Убедитесь что бот работал с RECORD_MARKET_DATA=true в этот день.")
-        return
-
-    print(f"Загружено: {len(orderbooks)} снапшотов стакана, {len(trades_raw)} тиков сделок")
-
-    # Объединяем события в единый таймлайн.
-    # JSON bids/asks парсим здесь один раз, а не 111К раз внутри цикла.
-    events = []
-    for ob in orderbooks:
-        events.append(("ob", ob.recorded_at, json.loads(ob.bids), json.loads(ob.asks)))
-    for t in trades_raw:
-        events.append(("trade", t.recorded_at, t))
-    events.sort(key=lambda x: x[1])
 
     # Создаём стратегию и симулятор
     strategy = ComboStrategy(config)
@@ -198,41 +204,62 @@ def run_backtest(config: dict, figi: str, date_from: datetime, date_to: datetime
 
     last_price = 0.0
     last_timeout_check = date_from
+    ob_count = 0
+    trade_count = 0
+    last_ts = date_from
 
-    for event in events:
-        event_type, ts = event[0], event[1]
+    # heapq.merge объединяет два отсортированных потока без загрузки всего в память
+    for event in heapq.merge(
+        _ob_events(figi, date_from, date_to),
+        _trade_events(figi, date_from, date_to),
+        key=lambda e: e[0],
+    ):
+        ts: datetime = event[0]
+        event_type: str = event[1]
+        last_ts = ts
+
         # Проверяем тайм-аут раз в минуту
         if (ts - last_timeout_check).total_seconds() >= 60:
             pm.check_timeout(ts)
             last_timeout_check = ts
 
         if event_type == "ob":
-            bids, asks = event[2], event[3]
+            ob_count += 1
+            bids = _loads(event[2])
+            asks = _loads(event[3])
             ob_data = {"figi": figi, "bids": bids, "asks": asks, "time": ts}
             strategy.on_orderbook(ob_data)
             sig = strategy.get_signal()
             if sig is not None:
                 pm.on_signal(sig, last_price)
 
-        elif event_type == "trade":
-            data = event[2]
+        else:  # trade
+            trade_count += 1
+            price: float = event[2]
             trade_data = {
                 "figi": figi,
-                "price": data.price,
-                "quantity": data.quantity,
-                "direction": data.direction,
-                "time": data.recorded_at,
+                "price": price,
+                "quantity": event[3],
+                "direction": event[4],
+                "time": ts,
             }
-            last_price = data.price
+            last_price = price
             strategy.on_trade(trade_data)
-            pm.update_market_price(data.price, ts)
+            pm.update_market_price(price, ts)
             sig = strategy.get_signal()
             if sig is not None:
                 pm.on_signal(sig, last_price)
 
+    if ob_count == 0:
+        print("Нет данных стакана за указанный период.")
+        print("Убедитесь что бот работал с RECORD_MARKET_DATA=true в этот день.")
+        return None
+
+    print(f"Обработано: {ob_count} снапшотов стакана, {trade_count} тиков сделок")
+
     # Закрываем незакрытую позицию по последней цене
     if pm.has_position:
-        pm._close(last_price, events[-1][1], "end_of_data")
+        pm._close(last_price, last_ts, "end_of_data")
 
     return pm.trades
 
