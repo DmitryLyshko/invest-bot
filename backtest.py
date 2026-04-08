@@ -196,6 +196,7 @@ def _trade_events(figi: str, date_from: datetime, date_to: datetime) -> Generato
 
 def run_backtest(config: dict, figi: str, date_from: datetime, date_to: datetime, commission_rate: float):
     print(f"\nЗагрузка данных {figi} с {date_from.date()} по {(date_to - timedelta(seconds=1)).date()}...")
+    print("Открываю потоки из БД...", flush=True)
 
     # Создаём стратегию и симулятор
     strategy = ComboStrategy(config)
@@ -207,6 +208,7 @@ def run_backtest(config: dict, figi: str, date_from: datetime, date_to: datetime
     ob_count = 0
     trade_count = 0
     last_ts = date_from
+    _PROGRESS_STEP = 10_000
 
     # heapq.merge объединяет два отсортированных потока без загрузки всего в память
     for event in heapq.merge(
@@ -225,6 +227,9 @@ def run_backtest(config: dict, figi: str, date_from: datetime, date_to: datetime
 
         if event_type == "ob":
             ob_count += 1
+            if ob_count % _PROGRESS_STEP == 0:
+                print(f"  стакан {ob_count}  сделки {trade_count}  {ts.strftime('%H:%M:%S')}",
+                      flush=True)
             bids = _loads(event[2])
             asks = _loads(event[3])
             ob_data = {"figi": figi, "bids": bids, "asks": asks, "time": ts}

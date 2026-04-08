@@ -517,7 +517,7 @@ def iter_orderbook_snapshots(
     date_to: datetime,
     chunk_size: int = 2000,
 ) -> Generator[tuple, None, None]:
-    """Потоковое чтение стакана — не грузит всё в RAM сразу."""
+    """Потоковое чтение стакана — unbuffered cursor, не грузит всё в RAM."""
     with get_session() as session:
         q = (
             session.query(
@@ -531,6 +531,7 @@ def iter_orderbook_snapshots(
                 MarketOrderbook.recorded_at < date_to,
             )
             .order_by(MarketOrderbook.recorded_at)
+            .execution_options(stream_results=True)
             .yield_per(chunk_size)
         )
         for row in q:
@@ -561,7 +562,7 @@ def iter_trade_ticks(
     date_to: datetime,
     chunk_size: int = 5000,
 ) -> Generator[tuple, None, None]:
-    """Потоковое чтение сделок — не грузит всё в RAM сразу."""
+    """Потоковое чтение сделок — unbuffered cursor, не грузит всё в RAM."""
     with get_session() as session:
         q = (
             session.query(
@@ -576,6 +577,7 @@ def iter_trade_ticks(
                 MarketTradeTick.recorded_at < date_to,
             )
             .order_by(MarketTradeTick.recorded_at)
+            .execution_options(stream_results=True)
             .yield_per(chunk_size)
         )
         for row in q:
