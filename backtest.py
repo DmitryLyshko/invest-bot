@@ -90,6 +90,7 @@ class BacktestPositionManager:
 
         # Предвычисляем константы — убираем dict.get() из горячего цикла
         tick_size: float = config.get("tick_size", 0.01)
+        self._tick_size: float = tick_size
         self._stop_distance: float = config.get("stop_ticks", 30) * tick_size
         tp_ticks: int = config.get("take_profit_ticks", 0)
         self._tp_distance: float = tp_ticks * tick_size if tp_ticks > 0 else 0.0
@@ -99,6 +100,7 @@ class BacktestPositionManager:
         self._min_hold_seconds: int = config.get("min_hold_seconds", 0)
         breakeven_ticks: int = config.get("breakeven_ticks", 0)
         self._breakeven_distance: float = breakeven_ticks * tick_size if breakeven_ticks > 0 else 0.0
+        self._min_profit_ticks_for_ofi_exit: int = config.get("min_profit_ticks_for_ofi_exit", 0)
 
     def set_strategy(self, strategy: ComboStrategy) -> None:
         self._strategy = strategy
@@ -125,6 +127,16 @@ class BacktestPositionManager:
                 held = (signal.timestamp - self._position.open_at).total_seconds()
                 if held < self._min_hold_seconds:
                     return
+                # Не выходить по OFI если прибыль мала — после комиссии будет убыток.
+                # При убытке (profit_ticks ≤ 0) выход разрешён: OFI подтверждает ошибку входа.
+                if self._min_profit_ticks_for_ofi_exit > 0:
+                    pos = self._position
+                    if pos.direction == "long":
+                        profit_ticks = (pos.current_price - pos.entry_price) / self._tick_size
+                    else:
+                        profit_ticks = (pos.entry_price - pos.current_price) / self._tick_size
+                    if 0 < profit_ticks < self._min_profit_ticks_for_ofi_exit:
+                        return
             self._close(current_price, signal.timestamp, signal.reason.value)
 
     def update_market_price(self, price: float, timestamp: datetime) -> None:

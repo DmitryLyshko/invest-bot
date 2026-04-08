@@ -136,6 +136,22 @@ class PositionManager:
                         f"< минимум {min_hold} сек. Сигнал проигнорирован."
                     )
                     return
+                # Не выходить по OFI если прибыль мала — после комиссии будет убыток.
+                # При убытке (profit_ticks ≤ 0) выход разрешён: OFI подтверждает ошибку входа.
+                min_profit_ticks = self.params.get("min_profit_ticks_for_ofi_exit", 0)
+                if min_profit_ticks > 0 and self._position.current_price > 0:
+                    tick_size = self.params.get("tick_size", 0.01)
+                    pos = self._position
+                    if pos.direction == "long":
+                        profit_ticks = (pos.current_price - pos.entry_price) / tick_size
+                    else:
+                        profit_ticks = (pos.entry_price - pos.current_price) / tick_size
+                    if 0 < profit_ticks < min_profit_ticks:
+                        logger.info(
+                            f"Выход по OFI заблокирован: прибыль {profit_ticks:.1f} тиков "
+                            f"< минимум {min_profit_ticks} тиков (не покрывает комиссию)."
+                        )
+                        return
             self._close_position(signal, db_signal.id, exit_reason=signal.reason.value)
 
     def _open_position(self, signal: Signal, signal_id: int) -> None:
