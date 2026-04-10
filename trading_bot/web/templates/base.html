@@ -91,6 +91,7 @@
         <a href="{{ url_for('trades.index') }}" class="{{ 'active' if request.endpoint == 'trades.index' }}">Сделки</a>
         <a href="{{ url_for('signals.index') }}" class="{{ 'active' if request.endpoint == 'signals.index' }}">Сигналы</a>
         <a href="{{ url_for('stats.index') }}" class="{{ 'active' if request.endpoint == 'stats.index' }}">Статистика</a>
+        <a href="{{ url_for('instruments.index') }}" class="{{ 'active' if request.endpoint in ('instruments.index', 'instruments.edit') }}">Инструменты</a>
         <span class="spacer"></span>
         <a href="{{ url_for('logout') }}" class="logout">Выход</a>
     </nav>

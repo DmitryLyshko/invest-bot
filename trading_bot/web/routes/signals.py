@@ -33,9 +33,19 @@ def index():
 @bp_stats.route("/stats")
 @login_required
 def index():
-    stats = repository.get_stats_summary()
-    pnl_by_hour = repository.get_pnl_by_hour()
-    pnl_by_weekday = repository.get_pnl_by_weekday()
+    current_ticker = request.args.get("ticker", "").strip().upper()
+    instrument_id = None
+    if current_ticker:
+        inst = repository.get_instrument_by_ticker(current_ticker)
+        if inst:
+            instrument_id = inst.id
+        else:
+            current_ticker = ""
+
+    instruments = repository.get_active_instruments()
+    stats = repository.get_stats_summary(instrument_id=instrument_id)
+    pnl_by_hour = repository.get_pnl_by_hour(instrument_id=instrument_id)
+    pnl_by_weekday = repository.get_pnl_by_weekday(instrument_id=instrument_id)
     pnl_by_day = repository.get_pnl_by_day(days=90)
 
     return render_template(
@@ -44,4 +54,6 @@ def index():
         pnl_by_hour=json.dumps(pnl_by_hour),
         pnl_by_weekday=json.dumps(pnl_by_weekday),
         pnl_by_day=json.dumps(pnl_by_day),
+        instruments=instruments,
+        current_ticker=current_ticker,
     )

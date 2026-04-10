@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+{% block title %}{{ ticker }} — настройка — Trading Bot{% endblock %}
+
+{% block content %}
+<div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem;">
+    <a href="{{ url_for('instruments.index') }}" style="color: #718096; font-size: 0.85rem;">← Инструменты</a>
+    <h1 class="page-title" style="margin-bottom: 0;">{{ ticker }}</h1>
+</div>
+
+{% if error %}
+<div style="background: #3a1a1a; border: 1px solid #e53e3e; border-radius: 6px; padding: 0.75rem 1rem; margin-bottom: 1.5rem; color: #fc8181;">
+    {{ error }}
+</div>
+{% endif %}
+
+<form method="post">
+
+    <!-- Идентификация -->
+    <div class="card" style="margin-bottom: 1rem;">
+        <div class="section-title" style="margin-top: 0;">Идентификация</div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div>
+                <label>FIGI</label>
+                <input type="text" name="figi" value="{{ params.figi }}" style="width: 100%; margin-top: 0.25rem;" required>
+            </div>
+            <div>
+                <label>Instrument ID <span style="color:#4a5568">(для подписки стакана)</span></label>
+                <input type="text" name="instrument_id" value="{{ params.instrument_id or '' }}" style="width: 100%; margin-top: 0.25rem;">
+            </div>
+            <div>
+                <label>Размер лота</label>
+                <input type="number" name="lot_size" value="{{ params.lot_size }}" min="1" style="width: 100%; margin-top: 0.25rem;" required>
+            </div>
+            <div>
+                <label>Комиссия за сторону <span style="color:#4a5568">(напр. 0.0004 = 0.04%)</span></label>
+                <input type="number" name="commission_rate" value="{{ params.commission_rate }}" step="0.00001" min="0" max="0.01" style="width: 100%; margin-top: 0.25rem;" required>
+            </div>
+            <div>
+                <label>Шаг цены (tick_size)</label>
+                <input type="number" name="tick_size" value="{{ params.tick_size }}" step="any" min="0.00001" style="width: 100%; margin-top: 0.25rem;" required>
+            </div>
+            <div>
+                <label>Макс. позиция (лотов)</label>
+                <input type="number" name="max_position_lots" value="{{ params.max_position_lots }}" min="1" style="width: 100%; margin-top: 0.25rem;" required>
+            </div>
+        </div>
+    </div>
+
+    <!-- OFI -->
+    <div class="card" style="margin-bottom: 1rem;">
+        <div class="section-title" style="margin-top: 0;">OFI — Order Flow Imbalance</div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div>
+                <label>Порог входа (0..1)</label>
+                <input type="number" name="ofi_threshold" value="{{ params.ofi_threshold }}" step="0.01" min="0.1" max="1" style="width: 100%; margin-top: 0.25rem;" required>
+            </div>
+            <div>
+                <label>Порог выхода (0..1)</label>
+                <input type="number" name="ofi_exit_threshold" value="{{ params.ofi_exit_threshold }}" step="0.01" min="0.1" max="1" style="width: 100%; margin-top: 0.25rem;" required>
+            </div>
+            <div>
+                <label>Уровней стакана (ofi_levels)</label>
+                <input type="number" name="ofi_levels" value="{{ params.ofi_levels }}" min="1" max="20" style="width: 100%; margin-top: 0.25rem;" required>
+            </div>
+            <div>
+                <label>Окно сглаживания (снимков стакана)</label>
+                <input type="number" name="ofi_smooth_window" value="{{ params.ofi_smooth_window }}" min="1" style="width: 100%; margin-top: 0.25rem;" required>
+            </div>
+            <div>
+                <label>Подтверждений для OFI-выхода подряд</label>
+                <input type="number" name="min_ofi_confirmations" value="{{ params.min_ofi_confirmations }}" min="1" style="width: 100%; margin-top: 0.25rem;" required>
+            </div>
+            <div>
+                <label>Мин. прибыль для OFI-выхода (тиков) <span style="color:#4a5568">0 = откл</span></label>
+                <input type="number" name="min_profit_ticks_for_ofi_exit" value="{{ params.min_profit_ticks_for_ofi_exit }}" min="0" style="width: 100%; margin-top: 0.25rem;" required>
+            </div>
+        </div>
+    </div>
+
+    <!-- Принт -->
+    <div class="card" style="margin-bottom: 1rem;">
+        <div class="section-title" style="margin-top: 0;">Детектор крупных принтов</div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div>
+                <label>Мультипликатор (объём ≥ медиана × N)</label>
+                <input type="number" name="print_multiplier" value="{{ params.print_multiplier }}" step="0.5" min="1" style="width: 100%; margin-top: 0.25rem;" required>
+            </div>
+            <div>
+                <label>Окно медианы (кол-во сделок)</label>
+                <input type="number" name="print_window" value="{{ params.print_window }}" min="10" style="width: 100%; margin-top: 0.25rem;" required>
+            </div>
+        </div>
+    </div>
+
+    <!-- Стопы -->
+    <div class="card" style="margin-bottom: 1rem;">
+        <div class="section-title" style="margin-top: 0;">Стопы и тейк-профит</div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div>
+                <label>Стоп-лосс (тиков)</label>
+                <input type="number" name="stop_ticks" value="{{ params.stop_ticks }}" min="1" style="width: 100%; margin-top: 0.25rem;" required>
+            </div>
+            <div>
+                <label>Безубыток — активировать через (тиков)</label>
+                <input type="number" name="breakeven_ticks" value="{{ params.breakeven_ticks }}" min="0" style="width: 100%; margin-top: 0.25rem;" required>
+            </div>
+            <div>
+                <label>Тейк-профит (тиков) <span style="color:#4a5568">0 = откл</span></label>
+                <input type="number" name="take_profit_ticks" value="{{ params.take_profit_ticks }}" min="0" style="width: 100%; margin-top: 0.25rem;" required>
+            </div>
+            <div>
+                <label>Макс. удержание позиции (минут)</label>
+                <input type="number" name="max_hold_minutes" value="{{ params.max_hold_minutes }}" min="1" style="width: 100%; margin-top: 0.25rem;" required>
+            </div>
+            <div>
+                <label>Мин. удержание до OFI-выхода (секунд)</label>
+                <input type="number" name="min_hold_seconds" value="{{ params.min_hold_seconds }}" min="0" style="width: 100%; margin-top: 0.25rem;" required>
+            </div>
+        </div>
+    </div>
+
+    <!-- Тайминги -->
+    <div class="card" style="margin-bottom: 1.5rem;">
+        <div class="section-title" style="margin-top: 0;">Тайминги и кулдауны</div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div>
+                <label>Кулдаун между сигналами (сек)</label>
+                <input type="number" name="cooldown_seconds" value="{{ params.cooldown_seconds }}" min="0" style="width: 100%; margin-top: 0.25rem;" required>
+            </div>
+            <div>
+                <label>Кулдаун после закрытия позиции (сек)</label>
+                <input type="number" name="post_close_cooldown_seconds" value="{{ params.post_close_cooldown_seconds }}" min="0" style="width: 100%; margin-top: 0.25rem;" required>
+            </div>
+            <div>
+                <label>Начало торговой сессии (MSK)</label>
+                <input type="time" name="trading_hours_start" value="{{ params.trading_hours.start }}" style="width: 100%; margin-top: 0.25rem;" required>
+            </div>
+            <div>
+                <label>Конец торговой сессии (MSK)</label>
+                <input type="time" name="trading_hours_end" value="{{ params.trading_hours.end }}" style="width: 100%; margin-top: 0.25rem;" required>
+            </div>
+            <div>
+                <label>Пропуск минут после открытия</label>
+                <input type="number" name="skip_first_minutes" value="{{ params.skip_first_minutes }}" min="0" style="width: 100%; margin-top: 0.25rem;" required>
+            </div>
+        </div>
+    </div>
+
+    <div style="display: flex; gap: 1rem; align-items: center;">
+        <button type="submit" class="btn btn-success">Сохранить</button>
+        <a href="{{ url_for('instruments.index') }}" style="color: #718096; font-size: 0.875rem;">Отмена</a>
+        <span style="font-size: 0.8rem; color: #4a5568; margin-left: 0.5rem;">
+            Параметры стратегии применятся после перезапуска бота
+        </span>
+    </div>
+
+</form>
+{% endblock %}

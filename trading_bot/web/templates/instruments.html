@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}Инструменты — Trading Bot{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+    <h1 class="page-title" style="margin-bottom: 0;">Инструменты</h1>
+    <button class="btn btn-success btn-sm" id="showAddBtn" onclick="toggleAddForm(true)">+ Добавить тикер</button>
+</div>
+
+<!-- Add ticker form -->
+<div id="addForm" class="card" style="display: none; margin-bottom: 1.5rem;">
+    <div class="section-title" style="margin-top: 0;">Новый тикер</div>
+    <form method="post" action="{{ url_for('instruments.add') }}">
+        <div class="form-row">
+            <div>
+                <label>Тикер</label><br>
+                <input type="text" name="ticker" placeholder="SBER" style="text-transform: uppercase; width: 120px; margin-top: 0.25rem;" required>
+            </div>
+            <div>
+                <label>FIGI</label><br>
+                <input type="text" name="figi" placeholder="BBG004730N88" style="width: 220px; margin-top: 0.25rem;" required>
+            </div>
+            <div style="align-self: flex-end;">
+                <button type="submit" class="btn btn-success btn-sm">Создать и настроить</button>
+                <button type="button" class="btn btn-sm" onclick="toggleAddForm(false)" style="background: #2d3748; color: #a0aec0;">Отмена</button>
+            </div>
+        </div>
+        <p style="font-size: 0.8rem; color: #718096; margin-top: 0.25rem;">
+            После создания откроется форма с параметрами. Бот начнёт торговать тикером после перезапуска.
+        </p>
+    </form>
+</div>
+
+<!-- Warning banner -->
+<div style="background: #2a2208; border: 1px solid #6b5427; border-radius: 6px; padding: 0.65rem 1rem; margin-bottom: 1.5rem; font-size: 0.82rem; color: #c9a84c;">
+    Изменения параметров применяются к стратегии после перезапуска бота. P&L и статистика рассчитываются из базы данных в реальном времени.
+</div>
+
+<!-- Instruments table -->
+<div class="card">
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Тикер</th>
+                    <th>Лот</th>
+                    <th>Тик</th>
+                    <th>Стоп / ТП</th>
+                    <th>OFI вход / выход</th>
+                    <th>Торговые часы</th>
+                    <th>P&L всего</th>
+                    <th>Сделок</th>
+                    <th>Win %</th>
+                    <th>Лучшая</th>
+                    <th>Худшая</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for ticker, params in yaml_config.items() %}
+            {% set stats = ticker_stats.get(ticker) %}
+            <tr>
+                <td><strong style="font-size: 1rem;">{{ ticker }}</strong></td>
+                <td>{{ params.lot_size }}</td>
+                <td>{{ params.tick_size }}</td>
+                <td>{{ params.stop_ticks }}т / {{ params.take_profit_ticks if params.take_profit_ticks else '—' }}т</td>
+                <td>{{ params.ofi_threshold }} / {{ params.ofi_exit_threshold }}</td>
+                <td style="white-space: nowrap;">{{ params.trading_hours.start }} – {{ params.trading_hours.end }}</td>
+                {% if stats and stats.total_trades > 0 %}
+                <td class="{{ 'positive' if stats.total_pnl >= 0 else 'negative' }}" style="font-weight: 600;">
+                    {{ '{:+.2f}'.format(stats.total_pnl) }} ₽
+                </td>
+                <td>{{ stats.total_trades }}</td>
+                <td class="{{ 'positive' if stats.win_rate >= 50 else '' }}">{{ stats.win_rate }}%</td>
+                <td class="positive">{{ '{:+.2f}'.format(stats.best_trade) }} ₽</td>
+                <td class="negative">{{ '{:.2f}'.format(stats.worst_trade) }} ₽</td>
+                {% else %}
+                <td colspan="5" style="color: #4a5568; font-size: 0.8rem;">нет сделок</td>
+                {% endif %}
+                <td>
+                    <a href="{{ url_for('instruments.edit', ticker=ticker) }}" class="btn btn-primary btn-sm">Настроить</a>
+                </td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleAddForm(show) {
+    document.getElementById('addForm').style.display = show ? 'block' : 'none';
+    document.getElementById('showAddBtn').style.display = show ? 'none' : '';
+}
+</script>
+{% endblock %}

@@ -290,10 +290,12 @@ def get_all_trades_for_export(
         return q.order_by(Trade.close_at.desc()).all()
 
 
-def get_stats_summary() -> dict:
-    """Агрегированная статистика по всем сделкам."""
+def get_stats_summary(instrument_id: Optional[int] = None) -> dict:
+    """Агрегированная статистика по сделкам (опционально по одному инструменту)."""
     with get_session() as session:
-        total_trades = session.query(func.count(Trade.id)).scalar() or 0
+        filt = (Trade.instrument_id == instrument_id,) if instrument_id is not None else ()
+
+        total_trades = session.query(func.count(Trade.id)).filter(*filt).scalar() or 0
         if total_trades == 0:
             return {
                 "total_trades": 0, "win_rate": 0, "total_pnl": 0,
@@ -301,25 +303,24 @@ def get_stats_summary() -> dict:
                 "best_trade": 0, "worst_trade": 0, "avg_hold_seconds": 0,
             }
 
-        total_pnl = float(session.query(func.sum(Trade.pnl_rub)).scalar() or 0)
-        wins = session.query(func.count(Trade.id)).filter(Trade.pnl_rub > 0).scalar() or 0
-        losses = session.query(func.count(Trade.id)).filter(Trade.pnl_rub <= 0).scalar() or 0
+        total_pnl = float(session.query(func.sum(Trade.pnl_rub)).filter(*filt).scalar() or 0)
+        wins = session.query(func.count(Trade.id)).filter(*filt, Trade.pnl_rub > 0).scalar() or 0
 
         avg_win = float(
-            session.query(func.avg(Trade.pnl_rub)).filter(Trade.pnl_rub > 0).scalar() or 0
+            session.query(func.avg(Trade.pnl_rub)).filter(*filt, Trade.pnl_rub > 0).scalar() or 0
         )
         avg_loss = float(
-            session.query(func.avg(Trade.pnl_rub)).filter(Trade.pnl_rub <= 0).scalar() or 0
+            session.query(func.avg(Trade.pnl_rub)).filter(*filt, Trade.pnl_rub <= 0).scalar() or 0
         )
-        best = float(session.query(func.max(Trade.pnl_rub)).scalar() or 0)
-        worst = float(session.query(func.min(Trade.pnl_rub)).scalar() or 0)
-        avg_hold = float(session.query(func.avg(Trade.hold_seconds)).scalar() or 0)
+        best = float(session.query(func.max(Trade.pnl_rub)).filter(*filt).scalar() or 0)
+        worst = float(session.query(func.min(Trade.pnl_rub)).filter(*filt).scalar() or 0)
+        avg_hold = float(session.query(func.avg(Trade.hold_seconds)).filter(*filt).scalar() or 0)
 
         gross_profit = float(
-            session.query(func.sum(Trade.pnl_rub)).filter(Trade.pnl_rub > 0).scalar() or 0
+            session.query(func.sum(Trade.pnl_rub)).filter(*filt, Trade.pnl_rub > 0).scalar() or 0
         )
         gross_loss = abs(float(
-            session.query(func.sum(Trade.pnl_rub)).filter(Trade.pnl_rub <= 0).scalar() or 0
+            session.query(func.sum(Trade.pnl_rub)).filter(*filt, Trade.pnl_rub <= 0).scalar() or 0
         ))
         profit_factor = gross_profit / gross_loss if gross_loss > 0 else float("inf")
 
@@ -352,15 +353,17 @@ def get_pnl_by_day(days: int = 30) -> List[dict]:
         return [{"day": str(r.day), "pnl": round(float(r.pnl), 2)} for r in rows]
 
 
-def get_pnl_by_hour() -> List[dict]:
+def get_pnl_by_hour(instrument_id: Optional[int] = None) -> List[dict]:
     """P&L по часу дня (0-23) — для анализа торговых паттернов."""
     with get_session() as session:
+        filt = (Trade.instrument_id == instrument_id,) if instrument_id is not None else ()
         rows = (
             session.query(
                 func.hour(Trade.close_at).label("hour"),
                 func.sum(Trade.pnl_rub).label("pnl"),
                 func.count(Trade.id).label("count"),
             )
+            .filter(*filt)
             .group_by(func.hour(Trade.close_at))
             .order_by(func.hour(Trade.close_at))
             .all()
@@ -368,15 +371,17 @@ def get_pnl_by_hour() -> List[dict]:
         return [{"hour": r.hour, "pnl": round(float(r.pnl), 2), "count": r.count} for r in rows]
 
 
-def get_pnl_by_weekday() -> List[dict]:
+def get_pnl_by_weekday(instrument_id: Optional[int] = None) -> List[dict]:
     """P&L по дню недели (1=Monday...7=Sunday)."""
     with get_session() as session:
+        filt = (Trade.instrument_id == instrument_id,) if instrument_id is not None else ()
         rows = (
             session.query(
                 func.dayofweek(Trade.close_at).label("dow"),
                 func.sum(Trade.pnl_rub).label("pnl"),
                 func.count(Trade.id).label("count"),
             )
+            .filter(*filt)
             .group_by(func.dayofweek(Trade.close_at))
             .order_by(func.dayofweek(Trade.close_at))
             .all()

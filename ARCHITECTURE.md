@@ -322,10 +322,11 @@ get_trades_page(page, per_page, direction, exit_reason, date_from, date_to) → 
 get_all_trades_for_export(...) → List[Trade]
 
 # Aggregates (для веба)
-get_stats_summary() → dict   # total_trades, win_rate, total_pnl, avg_win, avg_loss, profit_factor, best/worst, avg_hold
+get_stats_summary(instrument_id=None) → dict   # total_trades, win_rate, total_pnl, avg_win, avg_loss, profit_factor, best/worst, avg_hold
 get_pnl_by_day(days=30) → List[{day, pnl}]
-get_pnl_by_hour() → List[{hour, pnl, count}]
-get_pnl_by_weekday() → List[{dow, pnl, count}]
+get_pnl_by_hour(instrument_id=None) → List[{hour, pnl, count}]
+get_pnl_by_weekday(instrument_id=None) → List[{dow, pnl, count}]
+# instrument_id=None → все тикеры; передать int → фильтр по инструменту
 
 # Market data (бэктест)
 save_orderbook_snapshot(figi, bids, asks, timestamp)
@@ -355,7 +356,7 @@ create_app() → Flask   # регистрирует blueprints + Flask-Login
 get_position_managers() → dict[ticker, PositionManager]   # инжекция из main.py
 set_position_managers(pms: dict) → None
 ```
-Blueprints: `dashboard`, `trades`, `signals`, `stats`.
+Blueprints: `dashboard`, `trades`, `signals`, `stats`, `instruments`.
 
 ### `auth.py`
 ```python
@@ -383,19 +384,32 @@ GET /trades/export  → CSV-файл
 
 ### `routes/signals.py`  blueprints=`signals`, `stats`
 ```
-GET /signals  → signals.html  (пагинация)
-GET /stats    → stats.html    (aggregates + 3 Chart.js графика)
+GET /signals         → signals.html  (пагинация)
+GET /stats           → stats.html    (aggregates + 2 bar charts)
+GET /stats?ticker=X  → то же, но фильтр по тикеру (передаётся instrument_id в repository)
 ```
+
+### `routes/instruments.py`  blueprint=`instruments`
+```
+GET  /instruments              → instruments.html  (таблица тикеров + per-ticker статистика)
+GET  /instruments/<ticker>/edit → instrument_edit.html  (форма параметров)
+POST /instruments/<ticker>/edit → сохранить в instruments.yaml + upsert в БД → redirect
+POST /instruments/add          → добавить тикер в yaml (дефолтные параметры) → redirect /edit
+```
+Чтение/запись `instruments.yaml` через `yaml.safe_load` / `yaml.dump`. Комментарии не сохраняются.
+При сохранении: yaml обновляется сразу, стратегия применит изменения только после перезапуска.
 
 ### `templates/`
 ```
-base.html       — навигация, общие стили (тёмная тема, inline CSS)
-login.html      — standalone (без base)
-dashboard.html  — KPI карточки, equity chart, 2 таблицы
-trades.html     — таблица с фильтрами + пагинация + CSV кнопка
-signals.html    — таблица с пагинацией
-stats.html      — 4+4 KPI карточки + 2 bar charts
-error.html      — 404/500
+base.html             — навигация (Дашборд / Сделки / Сигналы / Статистика / Инструменты), стили
+login.html            — standalone (без base)
+dashboard.html        — KPI карточки, equity chart, 2 таблицы
+trades.html           — таблица с фильтрами + пагинация + CSV кнопка
+signals.html          — таблица с пагинацией
+stats.html            — тикер-фильтр + 4+4 KPI карточки + 2 bar charts
+instruments.html      — таблица тикеров (конфиг + per-ticker P&L/сделки/win%) + форма добавления
+instrument_edit.html  — форма редактирования всех параметров тикера (5 секций)
+error.html            — 404/500
 ```
 Chart.js подключается через CDN (`cdn.jsdelivr.net/npm/chart.js@4.4.0`).
 

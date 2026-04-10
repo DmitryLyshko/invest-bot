@@ -65,11 +65,13 @@ def create_app() -> Flask:
     from trading_bot.web.routes.dashboard import bp as dashboard_bp
     from trading_bot.web.routes.trades import bp as trades_bp
     from trading_bot.web.routes.signals import bp_signals, bp_stats
+    from trading_bot.web.routes.instruments import bp as instruments_bp
 
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(trades_bp)
     app.register_blueprint(bp_signals)
     app.register_blueprint(bp_stats)
+    app.register_blueprint(instruments_bp)
 
     # ── Error handlers ─────────────────────────────────────────────────────────
     @app.errorhandler(404)

@@ -2,7 +2,21 @@
 {% block title %}Статистика — Trading Bot{% endblock %}
 
 {% block content %}
-<h1 class="page-title">Статистика</h1>
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+    <h1 class="page-title" style="margin-bottom: 0;">Статистика{% if current_ticker %} — {{ current_ticker }}{% endif %}</h1>
+    <form method="get" class="form-row" style="margin-bottom: 0; gap: 0.5rem;">
+        <select name="ticker" style="min-width: 120px;">
+            <option value="">Все тикеры</option>
+            {% for inst in instruments %}
+            <option value="{{ inst.ticker }}" {{ 'selected' if inst.ticker == current_ticker }}>{{ inst.ticker }}</option>
+            {% endfor %}
+        </select>
+        <button type="submit" class="btn btn-primary btn-sm">Применить</button>
+        {% if current_ticker %}
+        <a href="{{ url_for('stats.index') }}" style="font-size: 0.85rem; color: #718096;">Сбросить</a>
+        {% endif %}
+    </form>
+</div>
 
 <!-- Summary KPIs -->
 <div class="grid grid-4" style="margin-bottom: 1.5rem;">
