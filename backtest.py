@@ -407,6 +407,7 @@ def main():
     parser.add_argument("--min-profit-ticks", type=int, help="Мин. тиков прибыли для выхода по OFI")
     parser.add_argument("--trend-filter-minutes", type=int, help="Окно тренд-фильтра в минутах")
     parser.add_argument("--trend-filter-ticks", type=int, help="Порог тренда в тиках (блокирует контртрендовые входы)")
+    parser.add_argument("--breakeven-ticks", type=int, help="Тиков в плюс до переноса стопа в безубыток (0=откл.)")
     parser.add_argument("--commission", type=float, default=0.0005,
                         help="Комиссия за сторону (default: 0.0005 = 0.05%%)")
     parser.add_argument("--list-dates", action="store_true", help="Показать даты с данными")
@@ -442,6 +443,8 @@ def main():
         config["trend_filter_minutes"] = args.trend_filter_minutes
     if args.trend_filter_ticks is not None:
         config["trend_filter_ticks"] = args.trend_filter_ticks
+    if args.breakeven_ticks is not None:
+        config["breakeven_ticks"] = args.breakeven_ticks
 
     figi = config["figi"]
 
