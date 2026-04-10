@@ -173,18 +173,24 @@ async function refreshPosition() {
     const r = await fetch('/api/position');
     const d = await r.json();
     const el = document.getElementById('position-info');
-    if (d.position) {
-        const p = d.position;
+    const positions = d.positions || {};
+    const active = Object.entries(positions).filter(([, p]) => p !== null);
+    if (active.length === 0) {
+        el.textContent = '—';
+        return;
+    }
+    el.innerHTML = active.map(([ticker, p]) => {
         const pnlColor = p.unrealized_pnl >= 0 ? '#68d391' : '#fc8181';
-        el.innerHTML = `<span style="color: ${p.direction === 'long' ? '#68d391' : '#fc8181'}">${p.direction.toUpperCase()}</span>
-            <span style="font-size: 0.8rem; color: #a0aec0; display: block; margin-top: 0.25rem;">
+        return `<div style="margin-bottom:0.4rem;">
+            <strong>${ticker}</strong>
+            <span style="color: ${p.direction === 'long' ? '#68d391' : '#fc8181'}"> ${p.direction.toUpperCase()}</span>
+            <span style="font-size: 0.8rem; color: #a0aec0; display: block; margin-top: 0.1rem;">
                 ${p.quantity_lots} лот @ ${p.entry_price.toFixed(2)}<br>
                 <span style="color: ${pnlColor}">${p.unrealized_pnl >= 0 ? '+' : ''}${p.unrealized_pnl.toFixed(2)} ₽</span>
                 · ${p.hold_minutes}м
-            </span>`;
-    } else {
-        el.textContent = '—';
-    }
+            </span>
+        </div>`;
+    }).join('');
 }
 
 refreshStatus();

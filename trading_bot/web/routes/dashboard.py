@@ -77,9 +77,11 @@ def bot_status():
 @bp.route("/api/position")
 @login_required
 def position():
-    """Получить сводку по текущей позиции из глобального менеджера."""
-    from trading_bot.web.app import get_position_manager
-    pm = get_position_manager()
-    if pm is None:
-        return jsonify({"position": None})
-    return jsonify({"position": pm.get_position_summary()})
+    """Получить сводки по открытым позициям всех тикеров."""
+    from trading_bot.web.app import get_position_managers
+    pms = get_position_managers()
+    positions = {
+        ticker: pm.get_position_summary()
+        for ticker, pm in pms.items()
+    }
+    return jsonify({"positions": positions})

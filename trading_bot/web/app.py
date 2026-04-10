@@ -12,17 +12,18 @@ from trading_bot.web.auth import WebUser, authenticate, load_user as _load_user
 
 logger = logging.getLogger(__name__)
 
-# Глобальный менеджер позиций — инжектируется из main.py
-_position_manager = None
+# Менеджеры позиций по тикерам — инжектируются из main.py
+# {ticker: PositionManager}
+_position_managers: dict = {}
 
 
-def get_position_manager():
-    return _position_manager
+def get_position_managers() -> dict:
+    return _position_managers
 
 
-def set_position_manager(pm) -> None:
-    global _position_manager
-    _position_manager = pm
+def set_position_managers(pms: dict) -> None:
+    global _position_managers
+    _position_managers = pms
 
 
 def create_app() -> Flask:

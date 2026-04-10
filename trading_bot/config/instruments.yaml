@@ -69,6 +69,134 @@ SBER:
   # 0 = отключено.
   min_profit_ticks_for_ofi_exit: 28
 
+GMKN:
+  figi: "BBG004731489"
+  instrument_id: "509edd0c-129c-4ee2-934d-7f6246126da1"
+  lot_size: 10
+  commission_rate: 0.0004
+  ofi_threshold: 0.75
+  print_multiplier: 8.0
+  print_window: 200
+  ofi_levels: 5
+  cooldown_seconds: 90
+  post_close_cooldown_seconds: 120
+  max_hold_minutes: 60
+  # tick=0.02 руб, stop=10 тиков = 0.20 руб/акция (~0.15% от 135.74)
+  tick_size: 0.02
+  stop_ticks: 10
+  breakeven_ticks: 8
+  max_position_lots: 1
+  # take_profit 1:3 (10×3=30)
+  take_profit_ticks: 30
+  trading_hours:
+    start: "10:05"
+    end: "18:30"
+  skip_first_minutes: 5
+  ofi_smooth_window: 12
+  min_hold_seconds: 120
+  ofi_exit_threshold: 0.5
+  min_ofi_confirmations: 4
+  # Комиссия ~5 тиков (135.74×0.08% / 0.02), порог чуть выше.
+  # При убытке (profit_ticks ≤ 0) — OFI-выход всегда разрешён.
+  # 0 = отключено.
+  min_profit_ticks_for_ofi_exit: 7
+
+VTBR:
+  figi: "BBG004730ZJ9"
+  instrument_id: "8e2b0325-0292-4654-8a18-4f63ed3b0e09"
+  lot_size: 1
+  commission_rate: 0.0004
+  ofi_threshold: 0.70
+  print_multiplier: 12.0
+  print_window: 300
+  ofi_levels: 5
+  cooldown_seconds: 60
+  post_close_cooldown_seconds: 90
+  max_hold_minutes: 60
+  # tick=0.005 руб, stop=25 тиков = 0.125 руб/акция (~0.14% от 90.29)
+  tick_size: 0.005
+  stop_ticks: 25
+  breakeven_ticks: 20
+  max_position_lots: 1
+  # take_profit 1:3 (25×3=75)
+  take_profit_ticks: 75
+  trading_hours:
+    start: "10:05"
+    end: "18:30"
+  skip_first_minutes: 5
+  ofi_smooth_window: 15
+  min_hold_seconds: 120
+  ofi_exit_threshold: 0.5
+  min_ofi_confirmations: 4
+  # Комиссия ~14 тиков (90.29×0.08% / 0.005), порог чуть выше.
+  # При убытке (profit_ticks ≤ 0) — OFI-выход всегда разрешён.
+  # 0 = отключено.
+  min_profit_ticks_for_ofi_exit: 16
+
+LKOH:
+  figi: "BBG004731032"
+  instrument_id: "02cfdf61-6298-4c0f-a9ca-9cabc82afaf3"
+  lot_size: 1
+  commission_rate: 0.0004
+  ofi_threshold: 0.75
+  print_multiplier: 8.0
+  print_window: 150
+  ofi_levels: 5
+  cooldown_seconds: 90
+  post_close_cooldown_seconds: 120
+  max_hold_minutes: 60
+  # tick=0.5 руб, stop=15 тиков = 7.5 руб/акция (~0.14% от 5447)
+  tick_size: 0.5
+  stop_ticks: 15
+  breakeven_ticks: 12
+  max_position_lots: 1
+  # take_profit 1:3 (15×3=45)
+  take_profit_ticks: 45
+  trading_hours:
+    start: "10:05"
+    end: "18:30"
+  skip_first_minutes: 5
+  ofi_smooth_window: 15
+  min_hold_seconds: 180
+  ofi_exit_threshold: 0.55
+  min_ofi_confirmations: 5
+  # Комиссия ~9 тиков (5447×0.08% / 0.5), порог чуть выше.
+  # При убытке (profit_ticks ≤ 0) — OFI-выход всегда разрешён.
+  # 0 = отключено.
+  min_profit_ticks_for_ofi_exit: 10
+
+GAZP:
+  figi: "BBG004730RP0"
+  instrument_id: "962e2a95-02a9-4171-abd7-aa198dbe643a"
+  lot_size: 10
+  commission_rate: 0.0004
+  ofi_threshold: 0.72
+  print_multiplier: 10.0
+  print_window: 200
+  ofi_levels: 5
+  cooldown_seconds: 60
+  post_close_cooldown_seconds: 90
+  max_hold_minutes: 60
+  # tick=0.01 руб, stop=20 тиков = 0.20 руб/акция (~0.16% от 128.93)
+  tick_size: 0.01
+  stop_ticks: 20
+  breakeven_ticks: 16
+  max_position_lots: 1
+  # take_profit 1:3 (20×3=60)
+  take_profit_ticks: 60
+  trading_hours:
+    start: "10:05"
+    end: "18:30"
+  skip_first_minutes: 5
+  ofi_smooth_window: 12
+  min_hold_seconds: 120
+  ofi_exit_threshold: 0.5
+  min_ofi_confirmations: 4
+  # Комиссия ~10 тиков (128.93×0.08% / 0.01), порог чуть выше.
+  # При убытке (profit_ticks ≤ 0) — OFI-выход всегда разрешён.
+  # 0 = отключено.
+  min_profit_ticks_for_ofi_exit: 12
+
 # Шаблон для добавления нового инструмента:
 # LKOH:
 #   figi: "BBG004731032"

@@ -29,7 +29,7 @@ from trading_bot.core.execution.order_manager import OrderManager
 from trading_bot.core.execution.position_manager import PositionManager
 from trading_bot.core.strategy.combo_strategy import ComboStrategy
 from trading_bot.db import repository
-from trading_bot.web.app import create_app, set_position_manager
+from trading_bot.web.app import create_app, set_position_managers
 from trading_bot.web.auth import ensure_default_user
 
 
@@ -182,58 +182,71 @@ def main() -> None:
     # ── T-Invest: получаем account_id ─────────────────────────────────────────
     account_id = get_first_account_id()
 
-    # ── Собираем компоненты (сейчас только SBER) ──────────────────────────────
-    # Берём первый активный инструмент из конфига
-    ticker = next(iter(instruments))
-    params = instruments[ticker]
-
-    strategy, order_manager, position_manager = build_components(ticker, params, account_id)
-    recorder = DataRecorder(figi=params["figi"])
-    on_orderbook, on_trade = make_event_handlers(strategy, position_manager, recorder)
-
-    # ── Стрим рыночных данных ─────────────────────────────────────────────────
-    stream = StreamHandler(
-        figi=params["figi"],
-        on_orderbook=on_orderbook,
-        on_trade=on_trade,
-        orderbook_depth=10,
-        instrument_id=params.get("instrument_id", ""),
-    )
-
-    stream_thread = threading.Thread(target=stream.start, daemon=True, name="stream")
-    stream_thread.start()
-    logger.info(f"Стрим запущен для {ticker} ({params['figi']})")
-
-    # ── Планировщик (проверка тайм-аута позиции) ──────────────────────────────
+    # ── Планировщик (проверка тайм-аутов позиций) ─────────────────────────────
     scheduler = BackgroundScheduler()
-    scheduler.add_job(position_manager.check_timeout, "interval", minutes=1, id="timeout_check")
+
+    # ── Собираем компоненты для каждого инструмента ───────────────────────────
+    position_managers: Dict[str, PositionManager] = {}
+    all_streams = []
+
+    for ticker, params in instruments.items():
+        strategy, order_manager, position_manager = build_components(ticker, params, account_id)
+        recorder = DataRecorder(figi=params["figi"])
+        on_orderbook, on_trade = make_event_handlers(strategy, position_manager, recorder)
+
+        stream = StreamHandler(
+            figi=params["figi"],
+            on_orderbook=on_orderbook,
+            on_trade=on_trade,
+            orderbook_depth=10,
+            instrument_id=params.get("instrument_id", ""),
+        )
+
+        t = threading.Thread(target=stream.start, daemon=True, name=f"stream_{ticker}")
+        t.start()
+        logger.info(f"Стрим запущен для {ticker} ({params['figi']})")
+
+        scheduler.add_job(
+            position_manager.check_timeout,
+            "interval",
+            minutes=1,
+            id=f"timeout_check_{ticker}",
+        )
+
+        position_managers[ticker] = position_manager
+        all_streams.append(stream)
+
     scheduler.start()
-    logger.info("Планировщик запущен")
+    logger.info(f"Планировщик запущен для {len(instruments)} инструментов")
 
     # ── Веб-дашборд ───────────────────────────────────────────────────────────
     flask_app = create_app()
-    set_position_manager(position_manager)
+    set_position_managers(position_managers)
 
     web_thread = threading.Thread(target=run_web, args=(flask_app,), daemon=True, name="web")
     web_thread.start()
     logger.info(f"Веб-дашборд запущен: http://{settings.WEB_HOST}:{settings.WEB_PORT}")
 
     # ── Обработка Ctrl+C ──────────────────────────────────────────────────────
+    stop_event = threading.Event()
+
     def shutdown(signum, frame):
         logger.info("Получен сигнал остановки, завершение...")
-        stream.stop()
+        for s in all_streams:
+            s.stop()
         scheduler.shutdown(wait=False)
         repository.log_event("INFO", "main", "Бот остановлен")
-        sys.exit(0)
+        stop_event.set()
 
     signal.signal(signal.SIGINT, shutdown)
     signal.signal(signal.SIGTERM, shutdown)
 
-    repository.log_event("INFO", "main", f"Бот запущен. Торгуем: {ticker}")
-    logger.info(f"Бот запущен. Нажмите Ctrl+C для остановки.")
+    tickers_str = ", ".join(instruments.keys())
+    repository.log_event("INFO", "main", f"Бот запущен. Торгуем: {tickers_str}")
+    logger.info(f"Бот запущен. Тикеры: {tickers_str}. Нажмите Ctrl+C для остановки.")
 
-    # Главный поток ждёт — все рабочие потоки daemon
-    stream_thread.join()
+    # Главный поток ждёт сигнала остановки
+    stop_event.wait()
 
 
 if __name__ == "__main__":
