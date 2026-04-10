@@ -12,6 +12,7 @@
 import argparse
 import heapq
 import sys
+from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -102,14 +103,42 @@ class BacktestPositionManager:
         self._breakeven_distance: float = breakeven_ticks * tick_size if breakeven_ticks > 0 else 0.0
         self._min_profit_ticks_for_ofi_exit: int = config.get("min_profit_ticks_for_ofi_exit", 0)
 
+        # Тренд-фильтр: блокировать вход против тренда последних N минут
+        self._trend_filter_seconds: int = config.get("trend_filter_minutes", 0) * 60
+        self._trend_filter_ticks: int = config.get("trend_filter_ticks", 0)
+        # deque хранит (timestamp, price) для окна тренд-фильтра
+        self._price_history: deque = deque()
+
     def set_strategy(self, strategy: ComboStrategy) -> None:
         self._strategy = strategy
+
+    def _is_blocked_by_trend(self, direction: str, now: datetime) -> bool:
+        """Возвращает True если направление противоречит тренду за последние N минут."""
+        if self._trend_filter_seconds <= 0 or self._trend_filter_ticks <= 0:
+            return False
+        cutoff = now - timedelta(seconds=self._trend_filter_seconds)
+        # Убираем устаревшие записи
+        while self._price_history and self._price_history[0][0] < cutoff:
+            self._price_history.popleft()
+        if not self._price_history:
+            return False
+        oldest_price = self._price_history[0][1]
+        current_price = self._price_history[-1][1]
+        delta_ticks = (current_price - oldest_price) / self._tick_size
+        # Если цена упала на filter_ticks → блокировать лонг; выросла → блокировать шорт
+        if direction == "long" and delta_ticks <= -self._trend_filter_ticks:
+            return True
+        if direction == "short" and delta_ticks >= self._trend_filter_ticks:
+            return True
+        return False
 
     def on_signal(self, signal: Signal, current_price: float) -> None:
         if signal.signal_type in (SignalType.LONG, SignalType.SHORT):
             if self._position is not None:
                 return  # нет пирамидинга
             direction = "long" if signal.signal_type == SignalType.LONG else "short"
+            if self._is_blocked_by_trend(direction, signal.timestamp):
+                return  # тренд-фильтр заблокировал вход
             self._position = BacktestPosition(
                 direction=direction,
                 entry_price=current_price,
@@ -140,6 +169,10 @@ class BacktestPositionManager:
             self._close(current_price, signal.timestamp, signal.reason.value)
 
     def update_market_price(self, price: float, timestamp: datetime) -> None:
+        # Всегда пишем историю цен для тренд-фильтра (даже без позиции)
+        if self._trend_filter_seconds > 0:
+            self._price_history.append((timestamp, price))
+
         pos = self._position
         if pos is None:
             return
@@ -336,6 +369,10 @@ def print_results(trades: List[BacktestTrade], config: dict) -> None:
     print(f"    ofi_threshold={config['ofi_threshold']}  print_multiplier={config['print_multiplier']}")
     print(f"    stop_ticks={config.get('stop_ticks',30)}  take_profit_ticks={config.get('take_profit_ticks',0)}")
     print(f"    min_ofi_confirmations={config.get('min_ofi_confirmations',1)}")
+    tf_min = config.get("trend_filter_minutes", 0)
+    tf_ticks = config.get("trend_filter_ticks", 0)
+    if tf_min > 0 and tf_ticks > 0:
+        print(f"    trend_filter={tf_min}min/{tf_ticks}ticks")
     print("=" * 55)
 
     print("\n  Детали сделок:")
@@ -368,6 +405,8 @@ def main():
     parser.add_argument("--min-ofi-confirmations", type=int, help="Подтверждений OFI для выхода")
     parser.add_argument("--post-close-cooldown", type=int, help="Кулдаун после закрытия позиции (сек)")
     parser.add_argument("--min-profit-ticks", type=int, help="Мин. тиков прибыли для выхода по OFI")
+    parser.add_argument("--trend-filter-minutes", type=int, help="Окно тренд-фильтра в минутах")
+    parser.add_argument("--trend-filter-ticks", type=int, help="Порог тренда в тиках (блокирует контртрендовые входы)")
     parser.add_argument("--commission", type=float, default=0.0005,
                         help="Комиссия за сторону (default: 0.0005 = 0.05%%)")
     parser.add_argument("--list-dates", action="store_true", help="Показать даты с данными")
@@ -399,6 +438,10 @@ def main():
         config["post_close_cooldown_seconds"] = args.post_close_cooldown
     if args.min_profit_ticks is not None:
         config["min_profit_ticks_for_ofi_exit"] = args.min_profit_ticks
+    if args.trend_filter_minutes is not None:
+        config["trend_filter_minutes"] = args.trend_filter_minutes
+    if args.trend_filter_ticks is not None:
+        config["trend_filter_ticks"] = args.trend_filter_ticks
 
     figi = config["figi"]
 
