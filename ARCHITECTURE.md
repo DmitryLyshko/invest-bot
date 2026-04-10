@@ -265,12 +265,12 @@ get_mid_price(orderbook) → float | None
 ### `data_recorder.py`
 ```python
 class DataRecorder:
-    __init__(figi: str)   # активен если RECORD_MARKET_DATA=true
+    __init__(figi: str, instrument_config: dict | None)   # активен если RECORD_MARKET_DATA=true
     on_orderbook(data: dict) → None   # запись стакана; каждый N-й (RECORD_ORDERBOOK_INTERVAL)
     on_trade(data: dict) → None       # запись тикового трейда
 ```
 Подключается к тем же колбэкам что и стратегия — параллельно, без вмешательства.
-При `RECORD_MARKET_DATA=false` — no-op. SBER генерирует ~150-300k строк стакана/день.
+При `RECORD_MARKET_DATA=false` — no-op. Запись ведётся только в `trading_hours` (MSK) из конфига инструмента; если часы не заданы — пишет всегда. SBER генерирует ~150-300k строк стакана/день в торговое время.
 
 ---
 

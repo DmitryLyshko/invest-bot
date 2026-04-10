@@ -191,7 +191,7 @@ def main() -> None:
 
     for ticker, params in instruments.items():
         strategy, order_manager, position_manager = build_components(ticker, params, account_id)
-        recorder = DataRecorder(figi=params["figi"])
+        recorder = DataRecorder(figi=params["figi"], instrument_config=params)
         on_orderbook, on_trade = make_event_handlers(strategy, position_manager, recorder)
 
         stream = StreamHandler(
