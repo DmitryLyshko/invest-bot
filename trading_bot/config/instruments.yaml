@@ -69,6 +69,12 @@ SBER:
   # 0 = отключено.
   min_profit_ticks_for_ofi_exit: 28
 
+  # Фильтр тренда: окно скользящей средней mid-цен (в снимках стакана).
+  # LONG разрешён только если текущий mid > MA, SHORT — если mid < MA.
+  # SBER: ~5-10 снимков/сек, 300 снимков ≈ 30-60 сек тренда.
+  # 0 = отключён.
+  trend_ma_window: 300
+
 GMKN:
   figi: "BBG004731489"
   instrument_id: "509edd0c-129c-4ee2-934d-7f6246126da1"
@@ -100,6 +106,8 @@ GMKN:
   # При убытке (profit_ticks ≤ 0) — OFI-выход всегда разрешён.
   # 0 = отключено.
   min_profit_ticks_for_ofi_exit: 7
+  # GMKN: ~3-5 снимков/сек, 300 снимков ≈ 60-100 сек тренда
+  trend_ma_window: 300
 
 VTBR:
   figi: "BBG004730ZJ9"
@@ -132,6 +140,7 @@ VTBR:
   # При убытке (profit_ticks ≤ 0) — OFI-выход всегда разрешён.
   # 0 = отключено.
   min_profit_ticks_for_ofi_exit: 16
+  trend_ma_window: 300
 
 LKOH:
   figi: "BBG004731032"
@@ -164,6 +173,7 @@ LKOH:
   # При убытке (profit_ticks ≤ 0) — OFI-выход всегда разрешён.
   # 0 = отключено.
   min_profit_ticks_for_ofi_exit: 10
+  trend_ma_window: 300
 
 GAZP:
   figi: "BBG004730RP0"
@@ -196,6 +206,7 @@ GAZP:
   # При убытке (profit_ticks ≤ 0) — OFI-выход всегда разрешён.
   # 0 = отключено.
   min_profit_ticks_for_ofi_exit: 12
+  trend_ma_window: 300
 
 # Шаблон для добавления нового инструмента:
 # LKOH:

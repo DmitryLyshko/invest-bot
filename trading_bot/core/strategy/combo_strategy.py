@@ -22,8 +22,9 @@
   быстро при смене настроения).
 """
 import logging
+from collections import deque
 from datetime import datetime, time, timedelta
-from typing import Any, Dict, Optional
+from typing import Any, Deque, Dict, Optional
 
 from trading_bot.core.strategy.base_strategy import (
     BaseStrategy, Signal, SignalReason, SignalType,
@@ -76,6 +77,15 @@ class ComboStrategy(BaseStrategy):
         # новой позиции. Выход разрешён только при достижении min_ofi_confirmations.
         self._ofi_exit_confirmations: int = 0
 
+        # Фильтр тренда: скользящая средняя mid-цен.
+        # trend_ma_window > 0 — включён; 0 — отключён.
+        trend_ma_window = self.params.get("trend_ma_window", 0)
+        self._trend_ma_window: int = trend_ma_window
+        self._mid_history: Optional[Deque[float]] = (
+            deque(maxlen=trend_ma_window) if trend_ma_window > 0 else None
+        )
+        self._current_mid: Optional[float] = None
+
         # Кэшированные торговые часы (парсятся один раз, а не на каждом тике стакана)
         self._trading_start: Optional[time] = None
         self._trading_end: Optional[time] = None
@@ -106,6 +116,10 @@ class ComboStrategy(BaseStrategy):
                 print_window=self.params["print_window"],
                 print_multiplier=self.params["print_multiplier"],
             )
+        trend_ma_window = self.params.get("trend_ma_window", 0)
+        self._trend_ma_window = trend_ma_window
+        self._mid_history = deque(maxlen=trend_ma_window) if trend_ma_window > 0 else None
+        self._current_mid = None
 
     def on_orderbook(self, orderbook_data: Dict[str, Any]) -> None:
         """
@@ -121,11 +135,14 @@ class ComboStrategy(BaseStrategy):
         asks = orderbook_data.get("asks", [])
         timestamp: datetime = orderbook_data.get("time", datetime.utcnow())
 
-        # Обновляем котировки для print_detector
+        # Обновляем котировки для print_detector и фильтра тренда
         if bids and asks:
             best_bid = bids[0][0]
             best_ask = asks[0][0]
             self.print_detector.update_quotes(best_bid, best_ask)
+            self._current_mid = (best_bid + best_ask) / 2
+            if self._mid_history is not None:
+                self._mid_history.append(self._current_mid)
 
         # Пересчитываем OFI
         ofi = self.ofi_calc.update(bids, asks)
@@ -197,11 +214,29 @@ class ComboStrategy(BaseStrategy):
         if print_age > 15:
             return None
 
+        # ── Фильтр тренда ─────────────────────────────────────────────────
+        # Если trend_ma_window задан, блокируем входы против тренда.
+        # LONG разрешён только когда текущий mid > MA (восходящий тренд).
+        # SHORT разрешён только когда текущий mid < MA (нисходящий тренд).
+        trend_ma: Optional[float] = None
+        if self._mid_history is not None and self._current_mid is not None:
+            if len(self._mid_history) < self._trend_ma_window:
+                # Окно ещё не заполнено — ждём накопления данных
+                return None
+            trend_ma = sum(self._mid_history) / len(self._mid_history)
+
         # ── Условие LONG ──────────────────────────────────────────────────
         if ofi >= threshold and last_print.side == "buy":
+            if trend_ma is not None and self._current_mid <= trend_ma:
+                logger.debug(
+                    f"LONG заблокирован фильтром тренда: "
+                    f"mid={self._current_mid:.4f} <= MA({self._trend_ma_window})={trend_ma:.4f}"
+                )
+                return None
             logger.info(
                 f"LONG сигнал: OFI={ofi:.3f} >= {threshold}, "
                 f"принт buy x{last_print.multiplier} @ {last_print.price:.2f}"
+                + (f", mid={self._current_mid:.4f} > MA={trend_ma:.4f}" if trend_ma else "")
             )
             self._last_signal_time = timestamp
             # После использования сигнала сбрасываем принт
@@ -217,9 +252,16 @@ class ComboStrategy(BaseStrategy):
 
         # ── Условие SHORT ─────────────────────────────────────────────────
         if ofi <= -threshold and last_print.side == "sell":
+            if trend_ma is not None and self._current_mid >= trend_ma:
+                logger.debug(
+                    f"SHORT заблокирован фильтром тренда: "
+                    f"mid={self._current_mid:.4f} >= MA({self._trend_ma_window})={trend_ma:.4f}"
+                )
+                return None
             logger.info(
                 f"SHORT сигнал: OFI={ofi:.3f} <= -{threshold}, "
                 f"принт sell x{last_print.multiplier} @ {last_print.price:.2f}"
+                + (f", mid={self._current_mid:.4f} < MA={trend_ma:.4f}" if trend_ma else "")
             )
             self._last_signal_time = timestamp
             self.print_detector.clear_last_print()
@@ -404,3 +446,6 @@ class ComboStrategy(BaseStrategy):
         self._current_ofi = None
         self._ofi_exit_confirmations = 0
         self._last_close_time = None
+        if self._mid_history is not None:
+            self._mid_history.clear()
+        self._current_mid = None

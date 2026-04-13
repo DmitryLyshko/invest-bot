@@ -106,6 +106,7 @@ SBER:
   max_hold_minutes: 60
   min_hold_seconds: 120       # минимальное время до OFI-выхода
   min_profit_ticks_for_ofi_exit: 28  # OFI-выход блокируется при малой прибыли
+  trend_ma_window: 300               # окно MA mid-цен для фильтра тренда (0 = выкл)
   max_position_lots: 1
 
   # Стопы и тейк
@@ -177,7 +178,8 @@ class ComboStrategy(BaseStrategy):
     reset()
     # property: current_ofi
 ```
-**Вход:** `|OFI| >= ofi_threshold` + принт той же стороны + свежесть принта ≤ **15с** + cooldown.
+**Вход:** `|OFI| >= ofi_threshold` + принт той же стороны + свежесть принта ≤ **15с** + cooldown + фильтр тренда.
+**Фильтр тренда:** если `trend_ma_window > 0` — LONG разрешён только при `mid > MA(N)`, SHORT — при `mid < MA(N)`. Окно накапливает mid-цены из стакана; до заполнения входы блокируются. `0` = отключён.
 **Выход:** OFI против позиции на `min_ofi_confirmations` подтверждений подряд, `|OFI| >= ofi_exit_threshold`.
 **Защита от преждевременного закрытия:**
 - `_ofi_exit_confirmations` — счётчик сбрасывается если OFI перестаёт быть против позиции
