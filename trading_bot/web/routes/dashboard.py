@@ -85,3 +85,14 @@ def position():
         for ticker, pm in pms.items()
     }
     return jsonify({"positions": positions})
+
+
+@bp.route("/api/account")
+@login_required
+def account():
+    """Получить баланс счёта и статистику портфеля."""
+    from trading_bot.web.app import get_portfolio_manager
+    pm = get_portfolio_manager()
+    if pm is None:
+        return jsonify({"portfolio_value": None, "open_positions": 0, "max_positions": 3})
+    return jsonify(pm.get_summary())

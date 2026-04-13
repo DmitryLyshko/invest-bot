@@ -26,10 +26,11 @@ from trading_bot.config import settings
 from trading_bot.core.data.data_recorder import DataRecorder
 from trading_bot.core.data.stream_handler import StreamHandler
 from trading_bot.core.execution.order_manager import OrderManager
+from trading_bot.core.execution.portfolio_manager import PortfolioManager
 from trading_bot.core.execution.position_manager import PositionManager
 from trading_bot.core.strategy.combo_strategy import ComboStrategy
 from trading_bot.db import repository
-from trading_bot.web.app import create_app, set_position_managers
+from trading_bot.web.app import create_app, set_portfolio_manager, set_position_managers
 from trading_bot.web.auth import ensure_default_user
 
 
@@ -112,7 +113,12 @@ def get_first_account_id() -> str:
             return account.id
 
 
-def build_components(ticker: str, instrument_params: dict, account_id: str):
+def build_components(
+    ticker: str,
+    instrument_params: dict,
+    account_id: str,
+    portfolio_manager: PortfolioManager,
+):
     """Создать все торговые компоненты для одного инструмента."""
     instrument_id = instrument_params["db_instrument_id"]
 
@@ -123,6 +129,7 @@ def build_components(ticker: str, instrument_params: dict, account_id: str):
         instrument_config=instrument_params,
         order_manager=order_manager,
         strategy=strategy,
+        portfolio_manager=portfolio_manager,
     )
 
     return strategy, order_manager, position_manager
@@ -182,6 +189,19 @@ def main() -> None:
     # ── T-Invest: получаем account_id ─────────────────────────────────────────
     account_id = get_first_account_id()
 
+    # ── Менеджер портфеля (общий для всех тикеров) ────────────────────────────
+    portfolio_manager = PortfolioManager(
+        account_id=account_id,
+        max_positions=settings.MAX_GLOBAL_POSITIONS,
+        max_position_pct=settings.MAX_POSITION_PCT,
+    )
+    portfolio_manager.refresh()
+    logger.info(
+        f"Портфель: {portfolio_manager.portfolio_value:.2f} руб. "
+        f"(лимит {settings.MAX_GLOBAL_POSITIONS} позиций, "
+        f"макс {settings.MAX_POSITION_PCT*100:.0f}% на сделку)"
+    )
+
     # ── Планировщик (проверка тайм-аутов позиций) ─────────────────────────────
     scheduler = BackgroundScheduler()
 
@@ -190,7 +210,9 @@ def main() -> None:
     all_streams = []
 
     for ticker, params in instruments.items():
-        strategy, order_manager, position_manager = build_components(ticker, params, account_id)
+        strategy, order_manager, position_manager = build_components(
+            ticker, params, account_id, portfolio_manager
+        )
         recorder = DataRecorder(figi=params["figi"], instrument_config=params)
         on_orderbook, on_trade = make_event_handlers(strategy, position_manager, recorder)
 
@@ -216,12 +238,16 @@ def main() -> None:
         position_managers[ticker] = position_manager
         all_streams.append(stream)
 
+    # Обновлять стоимость портфеля каждую минуту
+    scheduler.add_job(portfolio_manager.refresh, "interval", minutes=1, id="portfolio_refresh")
+
     scheduler.start()
     logger.info(f"Планировщик запущен для {len(instruments)} инструментов")
 
     # ── Веб-дашборд ───────────────────────────────────────────────────────────
     flask_app = create_app()
     set_position_managers(position_managers)
+    set_portfolio_manager(portfolio_manager)
 
     web_thread = threading.Thread(target=run_web, args=(flask_app,), daemon=True, name="web")
     web_thread.start()

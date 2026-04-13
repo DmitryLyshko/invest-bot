@@ -28,9 +28,18 @@
         <div class="card-title">Win Rate (сегодня)</div>
         <div class="card-value {{ 'positive' if win_rate >= 50 else '' }}">{{ win_rate }}%</div>
     </div>
-    <div class="card" id="position-card">
-        <div class="card-title">Открытая позиция</div>
-        <div id="position-info" class="card-value" style="font-size: 1rem;">—</div>
+    <div class="card" id="account-card">
+        <div class="card-title">Счёт / Позиции</div>
+        <div id="account-value" class="card-value" style="font-size: 1.1rem;">—</div>
+        <div id="account-positions" style="font-size: 0.75rem; color: #718096; margin-top: 0.25rem;">загрузка...</div>
+    </div>
+</div>
+
+<!-- Position Details -->
+<div id="position-block" style="margin-bottom: 1.5rem; display: none;">
+    <div class="card">
+        <div class="section-title" style="margin-top: 0;">Открытые позиции</div>
+        <div id="position-info" style="font-size: 0.95rem;"></div>
     </div>
 </div>
 
@@ -168,34 +177,59 @@ async function toggleBot() {
     refreshStatus();
 }
 
+// Account balance refresh
+async function refreshAccount() {
+    try {
+        const r = await fetch('/api/account');
+        const d = await r.json();
+        const valEl = document.getElementById('account-value');
+        const posEl = document.getElementById('account-positions');
+        if (d.portfolio_value !== null && d.portfolio_value !== undefined) {
+            valEl.textContent = d.portfolio_value.toLocaleString('ru-RU', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' ₽';
+        } else {
+            valEl.textContent = '—';
+        }
+        const open = d.open_positions ?? 0;
+        const max = d.max_positions ?? 3;
+        const pct = d.max_position_pct ? Math.round(d.max_position_pct * 100) : 30;
+        posEl.textContent = `позиций: ${open}/${max} · макс ${pct}%/сделку`;
+    } catch (e) {
+        // ignore
+    }
+}
+
 // Position refresh
 async function refreshPosition() {
     const r = await fetch('/api/position');
     const d = await r.json();
     const el = document.getElementById('position-info');
+    const block = document.getElementById('position-block');
     const positions = d.positions || {};
     const active = Object.entries(positions).filter(([, p]) => p !== null);
     if (active.length === 0) {
-        el.textContent = '—';
+        block.style.display = 'none';
         return;
     }
+    block.style.display = '';
     el.innerHTML = active.map(([ticker, p]) => {
         const pnlColor = p.unrealized_pnl >= 0 ? '#68d391' : '#fc8181';
-        return `<div style="margin-bottom:0.4rem;">
-            <strong>${ticker}</strong>
-            <span style="color: ${p.direction === 'long' ? '#68d391' : '#fc8181'}"> ${p.direction.toUpperCase()}</span>
-            <span style="font-size: 0.8rem; color: #a0aec0; display: block; margin-top: 0.1rem;">
-                ${p.quantity_lots} лот @ ${p.entry_price.toFixed(2)}<br>
-                <span style="color: ${pnlColor}">${p.unrealized_pnl >= 0 ? '+' : ''}${p.unrealized_pnl.toFixed(2)} ₽</span>
-                · ${p.hold_minutes}м
-            </span>
+        const dirColor = p.direction === 'long' ? '#68d391' : '#fc8181';
+        return `<div style="display:flex; align-items:center; gap:1rem; padding:0.5rem 0; border-bottom:1px solid #1e2233;">
+            <strong style="min-width:60px;">${ticker}</strong>
+            <span style="color:${dirColor}; font-weight:600; min-width:50px;">${p.direction.toUpperCase()}</span>
+            <span style="color:#a0aec0;">${p.quantity_lots} лот @ ${p.entry_price.toFixed(2)}</span>
+            <span style="color:#a0aec0;">→ ${p.current_price ? p.current_price.toFixed(2) : '—'}</span>
+            <span style="color:${pnlColor}; font-weight:600; margin-left:auto;">${p.unrealized_pnl >= 0 ? '+' : ''}${p.unrealized_pnl.toFixed(2)} ₽</span>
+            <span style="color:#718096; font-size:0.8rem;">${p.hold_minutes}м</span>
         </div>`;
     }).join('');
 }
 
 refreshStatus();
+refreshAccount();
 refreshPosition();
 setInterval(refreshStatus, 10000);
+setInterval(refreshAccount, 30000);
 setInterval(refreshPosition, 5000);
 </script>
 {% endblock %}

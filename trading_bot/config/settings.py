@@ -29,6 +29,10 @@ WEB_PORT: int = int(os.environ.get("WEB_PORT", "5000"))
 # ─── Риск-менеджмент ──────────────────────────────────────────────────────────
 # Дневной лимит убытков в рублях. При достижении бот прекращает торговлю до след. дня.
 DAILY_LOSS_LIMIT_RUB: float = float(os.environ.get("DAILY_LOSS_LIMIT_RUB", "-500.0"))
+# Максимальное число одновременно открытых позиций (по всем тикерам)
+MAX_GLOBAL_POSITIONS: int = int(os.environ.get("MAX_GLOBAL_POSITIONS", "3"))
+# Максимальная доля портфеля на одну сделку (0.30 = 30%)
+MAX_POSITION_PCT: float = float(os.environ.get("MAX_POSITION_PCT", "0.30"))
 
 # ─── Логирование ──────────────────────────────────────────────────────────────
 LOG_DIR: Path = BASE_DIR / "logs"

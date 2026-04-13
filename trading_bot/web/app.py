@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 # Менеджеры позиций по тикерам — инжектируются из main.py
 # {ticker: PositionManager}
 _position_managers: dict = {}
+_portfolio_manager = None
 
 
 def get_position_managers() -> dict:
@@ -24,6 +25,15 @@ def get_position_managers() -> dict:
 def set_position_managers(pms: dict) -> None:
     global _position_managers
     _position_managers = pms
+
+
+def get_portfolio_manager():
+    return _portfolio_manager
+
+
+def set_portfolio_manager(pm) -> None:
+    global _portfolio_manager
+    _portfolio_manager = pm
 
 
 def create_app() -> Flask:

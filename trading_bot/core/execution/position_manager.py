@@ -16,6 +16,7 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
 
 from trading_bot.core.execution.order_manager import OrderManager
+from trading_bot.core.execution.portfolio_manager import PortfolioManager
 from trading_bot.core.risk.risk_manager import RiskCheckFailed, RiskManager
 from trading_bot.core.strategy.base_strategy import Signal, SignalReason, SignalType
 from trading_bot.db import repository
@@ -73,15 +74,19 @@ class PositionManager:
         instrument_config: Dict[str, Any],
         order_manager: OrderManager,
         strategy,  # ComboStrategy (не типизируем для избежания циклических импортов)
+        portfolio_manager: Optional[PortfolioManager] = None,
     ) -> None:
         self.instrument_id = instrument_id
         self.params = instrument_config
         self.order_manager = order_manager
         self.strategy = strategy
+        self.portfolio_manager = portfolio_manager
         self.risk_manager = RiskManager(instrument_id, instrument_config)
 
         # Текущая открытая позиция (None если нет)
         self._position: Optional[OpenPosition] = None
+        # Последняя известная рыночная цена (для расчёта размера лота)
+        self._last_price: float = 0.0
 
     def on_signal(self, signal: Signal) -> None:
         """
@@ -123,6 +128,20 @@ class PositionManager:
         )
 
         if signal.signal_type in (SignalType.LONG, SignalType.SHORT):
+            # Глобальный лимит одновременных позиций
+            if self.portfolio_manager and not self.portfolio_manager.can_open():
+                count = self.portfolio_manager.open_positions_count
+                max_pos = self.portfolio_manager._max_positions
+                logger.warning(
+                    f"Глобальный лимит позиций достигнут: {count}/{max_pos}. "
+                    "Открытие заблокировано."
+                )
+                repository.log_event(
+                    "WARNING",
+                    "position_manager",
+                    f"Открытие заблокировано: достигнут лимит {max_pos} одновременных позиций",
+                )
+                return
             self._open_position(signal, db_signal.id)
         elif signal.signal_type == SignalType.EXIT:
             # Проверяем минимальное время удержания позиции перед закрытием по OFI.
@@ -160,7 +179,18 @@ class PositionManager:
         """Открыть новую позицию по сигналу."""
         direction = "buy" if signal.signal_type == SignalType.LONG else "sell"
         figi = self.params["figi"]
-        quantity_lots = self.params.get("max_position_lots", 1)
+
+        # Рассчитываем размер позиции
+        max_lots_cap = self.params.get("max_position_lots", None)
+        if self.portfolio_manager and self._last_price > 0:
+            lot_size = self.params.get("lot_size", 1)
+            quantity_lots = self.portfolio_manager.compute_lots(
+                current_price=self._last_price,
+                lot_size=lot_size,
+                max_lots_cap=max_lots_cap,
+            )
+        else:
+            quantity_lots = max_lots_cap if max_lots_cap else 1
 
         order, error = self.order_manager.place_market_order(
             figi=figi,
@@ -191,6 +221,10 @@ class PositionManager:
 
         # Сообщаем стратегии о новой позиции — она начнёт следить за выходом
         self.strategy.set_position(position_direction)
+
+        # Регистрируем позицию в глобальном портфеле
+        if self.portfolio_manager:
+            self.portfolio_manager.register_opened(self.instrument_id)
 
         repository.log_event(
             "INFO",
@@ -281,6 +315,10 @@ class PositionManager:
         self._position = None
         self.strategy.set_position(None, close_time=close_at)
 
+        # Снимаем регистрацию в глобальном портфеле
+        if self.portfolio_manager:
+            self.portfolio_manager.register_closed(self.instrument_id)
+
     def update_market_price(self, price: float) -> None:
         """
         Обновить текущую рыночную цену.
@@ -289,7 +327,9 @@ class PositionManager:
         Используется для:
         - расчёта нереализованного P&L на дашборде
         - проверки стоп-лосса
+        - расчёта размера лота при следующем открытии
         """
+        self._last_price = price
         if self._position is None:
             return
 
