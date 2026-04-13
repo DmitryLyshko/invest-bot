@@ -3,12 +3,15 @@
 Автокалибровка параметров стратегии на основе текущей волатильности.
 
 Для каждого инструмента:
-  - Получает 1-мин свечи за последние 7 дней из T-Invest API
-  - Рассчитывает ATR(14) как меру волатильности
+  - Получает часовые свечи за последние 7 дней из T-Invest API
+  - Рассчитывает ATR(14) по часовым свечам
   - Предлагает stop_ticks  = round(ATR * ATR_MULT / tick_size)
   - Предлагает breakeven_ticks = round(stop_ticks * BREAKEVEN_RATIO)
   - Предлагает take_profit_ticks = stop_ticks * TP_RATIO  (1:3 R:R)
   - Если есть данные market_trade_ticks в БД — калибрует print_multiplier
+
+Примечание: часовой ATR лучше подходит для калибровки стопов чем минутный —
+он отражает реальный дневной диапазон движения, а не шум отдельных свечей.
 
 Использование:
   python calibrate.py            — показать предложения, ничего не менять
@@ -26,11 +29,11 @@ import yaml
 
 # ─── Настраиваемые константы ──────────────────────────────────────────────────
 
-ATR_PERIOD = 14          # период ATR (в 1-мин свечах)
+ATR_PERIOD = 14          # период ATR (в часовых свечах)
 ATR_MULT = 1.5           # stop = ATR * ATR_MULT
 BREAKEVEN_RATIO = 0.85   # breakeven = stop * BREAKEVEN_RATIO
 TP_RATIO = 3             # take_profit = stop * TP_RATIO  (1:3 risk/reward)
-CANDLE_DAYS = 7          # сколько календарных дней свечей тянуть
+CANDLE_DAYS = 6          # сколько календарных дней свечей тянуть (часовые: лимит 1 неделя)
 TARGET_PRINTS_PER_DAY = 10  # желаемое кол-во крупных принтов в день (для print_multiplier)
 DB_HISTORY_DAYS = 5      # сколько дней market_trade_ticks использовать для print_multiplier
 
@@ -51,20 +54,27 @@ INSTRUMENTS_PATH = settings.INSTRUMENTS_CONFIG_PATH
 # ─── Свечи и ATR ──────────────────────────────────────────────────────────────
 
 def fetch_candles(client, instrument_id: str, days: int) -> list:
-    """Получить 1-мин свечи за последние N дней."""
+    """
+    Получить часовые свечи за последние N дней.
+
+    Лимиты T-Invest API:
+      1-мин  → max 1 день на запрос
+      1-час  → max 1 неделя на запрос  ← используем
+      1-день → max 1 год на запрос
+    """
     from tinkoff.invest import CandleInterval
     now = datetime.now(timezone.utc)
     response = client.market_data.get_candles(
         instrument_id=instrument_id,
         from_=now - timedelta(days=days),
         to=now,
-        interval=CandleInterval.CANDLE_INTERVAL_1_MIN,
+        interval=CandleInterval.CANDLE_INTERVAL_HOUR,
     )
     return response.candles
 
 
 def calc_atr(candles, period: int = ATR_PERIOD) -> Optional[float]:
-    """Рассчитать ATR(period) по 1-мин свечам."""
+    """Рассчитать ATR(period) по часовым свечам."""
     from tinkoff.invest.utils import quotation_to_decimal
     if len(candles) < period + 1:
         return None
@@ -147,7 +157,11 @@ def suggest_print_multiplier(figi: str) -> Optional[float]:
         return round((lo + hi) / 2, 1)
 
     except Exception as e:
-        print(f"    (print_multiplier: ошибка БД — {e})")
+        msg = str(e)
+        if "no such table" in msg or "doesn't exist" in msg:
+            print("    (print_multiplier: нет данных — включите RECORD_MARKET_DATA=true)")
+        else:
+            print(f"    (print_multiplier: ошибка БД — {type(e).__name__})")
         return None
 
 
@@ -164,7 +178,7 @@ def fmt_delta(current, suggested) -> str:
 def print_table(ticker: str, atr: float, tick_size: float,
                 current: dict, suggested: dict) -> None:
     print(f"\n{'─'*60}")
-    print(f"  {ticker}   ATR(14) 1-мин = {atr:.5f} руб  "
+    print(f"  {ticker}   ATR(14) часовой = {atr:.5f} руб  "
           f"(в тиках: {atr / tick_size:.1f})")
     print(f"  {'Параметр':<28} {'Текущее':>9} {'Предложено':>11} {'Δ':>8}")
     print(f"  {'─'*56}")
@@ -217,7 +231,7 @@ def main() -> None:
 
     print(f"\nКалибровка параметров — {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     print(f"ATR_MULT={ATR_MULT}  BREAKEVEN_RATIO={BREAKEVEN_RATIO}  TP_RATIO=1:{TP_RATIO}  "
-          f"Свечи: {CANDLE_DAYS} дней")
+          f"Свечи: часовые, {CANDLE_DAYS} дней")
 
     with Client(token) as client:
         for ticker, params in config.items():
