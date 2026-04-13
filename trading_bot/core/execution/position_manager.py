@@ -221,7 +221,7 @@ class PositionManager:
             logger.error(f"Не удалось закрыть позицию: {error}")
             return
 
-        close_price = order.price_executed or pos.current_price
+        close_price = order.price_executed if order.price_executed is not None else pos.current_price
         close_at = datetime.utcnow()
 
         # Рассчитываем P&L с учётом размера лота
