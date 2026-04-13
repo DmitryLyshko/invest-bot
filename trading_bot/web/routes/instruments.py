@@ -49,6 +49,8 @@ def _form_to_params(form) -> dict:
             "end": form.get("trading_hours_end", "18:30"),
         },
         "skip_first_minutes": int(form.get("skip_first_minutes", 5)),
+        "ofi_scale": float(form.get("ofi_scale", 1000.0)),
+        "trend_ma_window": int(form.get("trend_ma_window", 1000)),
     }
 
 
@@ -143,6 +145,8 @@ def add():
             "post_close_cooldown_seconds": 90,
             "trading_hours": {"start": "10:05", "end": "18:30"},
             "skip_first_minutes": 5,
+            "ofi_scale": 1000,
+            "trend_ma_window": 1000,
         }
         _save_yaml(yaml_config)
         _upsert_db(ticker, yaml_config[ticker])

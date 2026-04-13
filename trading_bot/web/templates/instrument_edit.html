@@ -143,6 +143,14 @@
                 <label>Пропуск минут после открытия</label>
                 <input type="number" name="skip_first_minutes" value="{{ params.skip_first_minutes }}" min="0" style="width: 100%; margin-top: 0.25rem;" required>
             </div>
+            <div>
+                <label>OFI Scale (масштаб нормализации)</label>
+                <input type="number" name="ofi_scale" value="{{ params.ofi_scale | default(1000) }}" min="1" step="any" style="width: 100%; margin-top: 0.25rem;" required>
+            </div>
+            <div>
+                <label>Trend MA Window (снимков стакана)</label>
+                <input type="number" name="trend_ma_window" value="{{ params.trend_ma_window | default(1000) }}" min="0" style="width: 100%; margin-top: 0.25rem;" required>
+            </div>
         </div>
     </div>
 

@@ -34,7 +34,7 @@ ATR_MULT = 1.5           # stop = ATR * ATR_MULT
 BREAKEVEN_RATIO = 0.85   # breakeven = stop * BREAKEVEN_RATIO
 TP_RATIO = 3             # take_profit = stop * TP_RATIO  (1:3 risk/reward)
 CANDLE_DAYS = 6          # сколько календарных дней свечей тянуть (часовые: лимит 1 неделя)
-TARGET_PRINTS_PER_DAY = 10  # желаемое кол-во крупных принтов в день (для print_multiplier)
+TARGET_PRINTS_PER_DAY = 5   # желаемое кол-во крупных принтов в день (для print_multiplier)
 DB_HISTORY_DAYS = 5      # сколько дней market_trade_ticks использовать для print_multiplier
 
 
@@ -145,7 +145,7 @@ def suggest_print_multiplier(figi: str) -> Optional[float]:
         target_total = TARGET_PRINTS_PER_DAY * DB_HISTORY_DAYS
 
         # Бинарный поиск мультипликатора
-        lo, hi = 1.0, 100.0
+        lo, hi = 1.0, 1000.0
         for _ in range(30):
             mid = (lo + hi) / 2
             count_prints = sum(1 for v in volumes if v >= median * mid)
@@ -154,7 +154,14 @@ def suggest_print_multiplier(figi: str) -> Optional[float]:
             else:
                 hi = mid
 
-        return round((lo + hi) / 2, 1)
+        result = round((lo + hi) / 2, 1)
+
+        # Если результат на верхней границе — данных недостаточно или распределение нестандартное
+        if result >= 950.0:
+            print(f"    (print_multiplier: результат у верхней границы, пропускаем)")
+            return None
+
+        return result
 
     except Exception as e:
         msg = str(e)
