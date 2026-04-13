@@ -2,78 +2,36 @@ SBER:
   figi: "BBG004730N88"
   instrument_id: "e6123145-9665-43e0-8413-cd61b8aa9b13"
   lot_size: 10
-  # Комиссия брокера за одну сторону (T-Invest тариф Трейдер)
   commission_rate: 0.0004
-  # Порог OFI для генерации сигнала. Значение от 0 до 1.
-  # 0.6 означает: дисбаланс должен составлять минимум 60% в сторону покупок или продаж
   ofi_threshold: 0.75
-  # Мультипликатор для определения крупного принта
-  # Объём сделки считается крупным, если он >= медиана * print_multiplier
   print_multiplier: 10.0
-  # Размер скользящего окна для расчёта медианы объёмов
   print_window: 200
-  # Количество уровней стакана для расчёта OFI (топ N уровней)
   ofi_levels: 5
-  # Минимальный интервал между сигналами (секунды)
   cooldown_seconds: 60
-  # Кулдаун после закрытия позиции (секунды).
-  # Предотвращает мгновенный флип: шорт закрылся по OFI → сразу лонг.
-  # OFI-разворот на выходе часто ложный, нужно подождать стабилизации.
   post_close_cooldown_seconds: 90
-  # Максимальное время удержания позиции (минуты)
   max_hold_minutes: 60
-  # Минимальный шаг цены
   tick_size: 0.01
-  # Стоп-лосс в тиках (единицах минимального шага цены)
   stop_ticks: 40
-  # Перенос стопа в безубыток: после движения на N тиков в нашу сторону
-  # стоп переносится на цену входа (худший итог = -комиссия)
   breakeven_ticks: 35
-  # Максимальный размер позиции в лотах
   max_position_lots: 1
-  # Тейк-профит в тиках (0 = отключён). Соотношение к стопу 1:3 (40 × 3 = 120)
   take_profit_ticks: 120
   trading_hours:
     start: "10:05"
     end: "18:30"
-  # Пропускать сигналы первые N минут после открытия рынка (высокая волатильность открытия)
   skip_first_minutes: 5
-
-  # --- ПАРАМЕТРЫ СТАБИЛИЗАЦИИ ВЫХОДА ---
-
-  # Количество последних снимков стакана для сглаживания OFI.
-  # Стакан SBER обновляется ~5-10 раз/сек, поэтому 15 снимков = ~2-3 секунды.
-  # Сглаживание убирает краткосрочные флипы OFI вызванные шумом стакана.
   ofi_smooth_window: 12
-
-  # Минимальное время удержания позиции в секундах.
-  # Позиция НЕ может быть закрыта раньше этого времени ни при каком OFI.
-  # Защищает от мгновенного закрытия сразу после открытия.
   min_hold_seconds: 120
-
-  # Порог OFI для выхода из позиции.
-  # Ближе к порогу входа — выход только при устойчивом развороте.
   ofi_exit_threshold: 0.5
-
-  # Сколько раз подряд OFI должен быть против позиции чтобы закрыть её.
-  # Защита от случайных кратковременных флипов стакана.
-  # При значении 4 — OFI должен быть против позиции на 4 последовательных
-  # апдейтах стакана, прежде чем выйти.
   min_ofi_confirmations: 4
-
-  # Минимальная прибыль в тиках для разрешения выхода по OFI-развороту.
-  # Блокирует OFI-выход если прибыль > 0 но меньше порога:
-  # выход при маленьком плюсе гарантирует убыток после комиссии.
-  # Комиссия SBER ~25.5 тиков (319 × 10 × 0.08%), порог чуть выше.
-  # При убытке (profit_ticks ≤ 0) — OFI-выход всегда разрешён.
-  # 0 = отключено.
   min_profit_ticks_for_ofi_exit: 28
-
-  # Фильтр тренда: окно скользящей средней mid-цен (в снимках стакана).
-  # LONG разрешён только если текущий mid > MA, SHORT — если mid < MA.
-  # SBER: ~5-10 снимков/сек, 300 снимков ≈ 30-60 сек тренда.
+  # Масштаб нормализации OFI: tanh(raw / ofi_scale).
+  # SBER: lot_size=10, очень ликвидный, типичный объём на уровне ~100-500 лотов.
+  # При raw OFI ≈ ofi_scale значение tanh ≈ 0.76 (у порога срабатывания).
+  ofi_scale: 1000
+  # Фильтр тренда: MA по mid-ценам из стакана (в снимках).
+  # SBER: ~5-10 снимков/сек → 1000 снимков ≈ 100-200 сек ≈ 2-3 мин тренда.
   # 0 = отключён.
-  trend_ma_window: 300
+  trend_ma_window: 1000
 
 GMKN:
   figi: "BBG004731489"
@@ -87,12 +45,10 @@ GMKN:
   cooldown_seconds: 90
   post_close_cooldown_seconds: 120
   max_hold_minutes: 60
-  # tick=0.02 руб, stop=10 тиков = 0.20 руб/акция (~0.15% от 135.74)
   tick_size: 0.02
   stop_ticks: 10
   breakeven_ticks: 8
   max_position_lots: 1
-  # take_profit 1:3 (10×3=30)
   take_profit_ticks: 30
   trading_hours:
     start: "10:05"
@@ -102,12 +58,11 @@ GMKN:
   min_hold_seconds: 120
   ofi_exit_threshold: 0.5
   min_ofi_confirmations: 4
-  # Комиссия ~5 тиков (135.74×0.08% / 0.02), порог чуть выше.
-  # При убытке (profit_ticks ≤ 0) — OFI-выход всегда разрешён.
-  # 0 = отключено.
   min_profit_ticks_for_ofi_exit: 7
-  # GMKN: ~3-5 снимков/сек, 300 снимков ≈ 60-100 сек тренда
-  trend_ma_window: 300
+  # GMKN: lot_size=10, менее ликвиден чем SBER, типичный объём ~20-100 лотов/уровень.
+  ofi_scale: 200
+  # GMKN: ~3-5 снимков/сек → 1000 снимков ≈ 200-333 сек ≈ 3-5 мин тренда.
+  trend_ma_window: 1000
 
 VTBR:
   figi: "BBG004730ZJ9"
@@ -121,12 +76,10 @@ VTBR:
   cooldown_seconds: 60
   post_close_cooldown_seconds: 90
   max_hold_minutes: 60
-  # tick=0.005 руб, stop=25 тиков = 0.125 руб/акция (~0.14% от 90.29)
   tick_size: 0.005
   stop_ticks: 25
   breakeven_ticks: 20
   max_position_lots: 1
-  # take_profit 1:3 (25×3=75)
   take_profit_ticks: 75
   trading_hours:
     start: "10:05"
@@ -136,11 +89,12 @@ VTBR:
   min_hold_seconds: 120
   ofi_exit_threshold: 0.5
   min_ofi_confirmations: 4
-  # Комиссия ~14 тиков (90.29×0.08% / 0.005), порог чуть выше.
-  # При убытке (profit_ticks ≤ 0) — OFI-выход всегда разрешён.
-  # 0 = отключено.
   min_profit_ticks_for_ofi_exit: 16
-  trend_ma_window: 300
+  # VTBR: lot_size=1, цена ~91 руб, высокий оборот в штуках.
+  # Типичный объём на уровне ~500-2000 лотов → scale ниже чем SBER.
+  ofi_scale: 300
+  # VTBR: ~4-8 снимков/сек → 1000 снимков ≈ 125-250 сек ≈ 2-4 мин тренда.
+  trend_ma_window: 1000
 
 LKOH:
   figi: "BBG004731032"
@@ -154,12 +108,10 @@ LKOH:
   cooldown_seconds: 90
   post_close_cooldown_seconds: 120
   max_hold_minutes: 60
-  # tick=0.5 руб, stop=15 тиков = 7.5 руб/акция (~0.14% от 5447)
   tick_size: 0.5
   stop_ticks: 15
   breakeven_ticks: 12
   max_position_lots: 1
-  # take_profit 1:3 (15×3=45)
   take_profit_ticks: 45
   trading_hours:
     start: "10:05"
@@ -169,11 +121,12 @@ LKOH:
   min_hold_seconds: 180
   ofi_exit_threshold: 0.55
   min_ofi_confirmations: 5
-  # Комиссия ~9 тиков (5447×0.08% / 0.5), порог чуть выше.
-  # При убытке (profit_ticks ≤ 0) — OFI-выход всегда разрешён.
-  # 0 = отключено.
   min_profit_ticks_for_ofi_exit: 10
-  trend_ma_window: 300
+  # LKOH: lot_size=1, цена ~5400 руб, низколиквидный.
+  # Типичный объём на уровне ~5-30 лотов → очень маленький scale.
+  ofi_scale: 100
+  # LKOH: ~1-3 снимков/сек → 1000 снимков ≈ 5-15 мин тренда.
+  trend_ma_window: 1000
 
 GAZP:
   figi: "BBG004730RP0"
@@ -187,12 +140,10 @@ GAZP:
   cooldown_seconds: 60
   post_close_cooldown_seconds: 90
   max_hold_minutes: 60
-  # tick=0.01 руб, stop=20 тиков = 0.20 руб/акция (~0.16% от 128.93)
   tick_size: 0.01
   stop_ticks: 20
   breakeven_ticks: 16
   max_position_lots: 1
-  # take_profit 1:3 (20×3=60)
   take_profit_ticks: 60
   trading_hours:
     start: "10:05"
@@ -202,29 +153,39 @@ GAZP:
   min_hold_seconds: 120
   ofi_exit_threshold: 0.5
   min_ofi_confirmations: 4
-  # Комиссия ~10 тиков (128.93×0.08% / 0.01), порог чуть выше.
-  # При убытке (profit_ticks ≤ 0) — OFI-выход всегда разрешён.
-  # 0 = отключено.
   min_profit_ticks_for_ofi_exit: 12
-  trend_ma_window: 300
+  # GAZP: lot_size=10, цена ~130 руб, умеренная ликвидность.
+  # Типичный объём на уровне ~50-300 лотов.
+  ofi_scale: 600
+  # GAZP: ~4-8 снимков/сек → 1000 снимков ≈ 125-250 сек ≈ 2-4 мин тренда.
+  trend_ma_window: 1000
 
 # Шаблон для добавления нового инструмента:
-# LKOH:
-#   figi: "BBG004731032"
+# TICKER:
+#   figi: "..."
+#   instrument_id: "..."
 #   lot_size: 1
 #   commission_rate: 0.0004
-#   ofi_threshold: 0.6
-#   print_multiplier: 6.0
-#   print_window: 150
+#   ofi_threshold: 0.7
+#   print_multiplier: 8.0
+#   print_window: 200
 #   ofi_levels: 5
-#   cooldown_seconds: 90
+#   cooldown_seconds: 60
+#   post_close_cooldown_seconds: 90
+#   max_hold_minutes: 60
+#   tick_size: 0.01
+#   stop_ticks: 20
+#   breakeven_ticks: 16
 #   max_position_lots: 1
+#   take_profit_ticks: 60
 #   trading_hours:
 #     start: "10:05"
 #     end: "18:30"
 #   skip_first_minutes: 5
-#   tick_size: 0.01
-#   ofi_smooth_window: 15
-#   min_hold_seconds: 180
-#   ofi_exit_threshold: 0.55
-#   min_ofi_confirmations: 5
+#   ofi_smooth_window: 12
+#   min_hold_seconds: 120
+#   ofi_exit_threshold: 0.5
+#   min_ofi_confirmations: 4
+#   min_profit_ticks_for_ofi_exit: 10
+#   ofi_scale: 500    # подобрать под ликвидность инструмента
+#   trend_ma_window: 1000

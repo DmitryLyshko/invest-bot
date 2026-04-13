@@ -106,7 +106,8 @@ SBER:
   max_hold_minutes: 60
   min_hold_seconds: 120       # минимальное время до OFI-выхода
   min_profit_ticks_for_ofi_exit: 28  # OFI-выход блокируется при малой прибыли
-  trend_ma_window: 300               # окно MA mid-цен для фильтра тренда (0 = выкл)
+  ofi_scale: 1000                    # масштаб tanh-нормализации (подбирается под ликвидность инструмента)
+  trend_ma_window: 1000              # окно MA mid-цен для фильтра тренда (0 = выкл)
   max_position_lots: 1
 
   # Стопы и тейк
@@ -147,7 +148,8 @@ class OFICalculator:
     reset()
     # property: last_ofi
 ```
-Алгоритм: Cont-Kukanov-Stoikov по топ N уровней. Нормализация через `tanh(raw / 1000)`.
+Алгоритм: Cont-Kukanov-Stoikov по топ N уровней. Нормализация через `tanh(raw / ofi_scale)`.
+`ofi_scale` берётся из конфига инструмента (дефолт 1000). Подбирается под ликвидность: при raw OFI ≈ ofi_scale → tanh ≈ 0.76. Слишком большой → OFI всегда около 0; слишком маленький → всегда ±1.
 Сглаживание: скользящее среднее по `smooth_window` последних значений.
 `_prev_bids/_prev_asks` хранят предыдущий снапшот для вычисления дельты.
 

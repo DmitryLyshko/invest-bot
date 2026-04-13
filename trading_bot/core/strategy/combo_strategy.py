@@ -49,6 +49,7 @@ class ComboStrategy(BaseStrategy):
         self.ofi_calc = OFICalculator(
             ofi_levels=self.params["ofi_levels"],
             smooth_window=self.params.get("ofi_smooth_window", 1),
+            ofi_scale=self.params.get("ofi_scale", 1000.0),
         )
         self.print_detector = PrintDetector(
             print_window=self.params["print_window"],
@@ -110,6 +111,7 @@ class ComboStrategy(BaseStrategy):
             self.ofi_calc = OFICalculator(
                 ofi_levels=self.params["ofi_levels"],
                 smooth_window=self.params.get("ofi_smooth_window", 1),
+                ofi_scale=self.params.get("ofi_scale", 1000.0),
             )
         if hasattr(self, "print_detector"):
             self.print_detector = PrintDetector(

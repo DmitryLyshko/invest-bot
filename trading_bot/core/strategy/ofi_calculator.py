@@ -29,13 +29,19 @@ class OFICalculator:
       - smooth_window:    int — окно сглаживания по скользящему среднему (обычно 5–20)
     """
 
-    def __init__(self, ofi_levels: int, smooth_window: int = 1) -> None:
+    def __init__(self, ofi_levels: int, smooth_window: int = 1, ofi_scale: float = 1000.0) -> None:
         # Количество уровней стакана для анализа
         self.ofi_levels = ofi_levels
 
         # Размер окна сглаживания. При значении 1 — сглаживание отключено
         # (возвращается мгновенное значение, поведение как раньше).
         self.smooth_window = max(1, smooth_window)
+
+        # Масштаб нормализации для tanh. Подбирается под типичный объём стакана
+        # конкретного инструмента: при raw OFI ≈ ofi_scale → tanh ≈ 0.76.
+        # Слишком большой scale → OFI всегда около 0, не достигает порога.
+        # Слишком маленький scale → OFI всегда ±1, нет дифференциации.
+        self.ofi_scale = max(1.0, ofi_scale)
 
         # Предыдущее состояние стакана — нужно для вычисления дельты
         self._prev_bids: List[Tuple[float, int]] = []  # [(price, qty), ...]
@@ -166,8 +172,7 @@ class OFICalculator:
         типичного дневного объёма SBER. При работе с другими инструментами
         можно вынести в конфиг.
         """
-        scale = 1000.0
-        return math.tanh(raw_ofi / scale)
+        return math.tanh(raw_ofi / self.ofi_scale)
 
     @property
     def last_ofi(self) -> Optional[float]:
