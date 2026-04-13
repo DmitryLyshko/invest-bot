@@ -32,7 +32,7 @@ GMKN:
   lot_size: 10
   commission_rate: 0.0004
   ofi_threshold: 0.75
-  print_multiplier: 100.0
+  print_multiplier: 613.6
   print_window: 200
   ofi_levels: 5
   cooldown_seconds: 90
@@ -88,17 +88,17 @@ LKOH:
   lot_size: 1
   commission_rate: 0.0004
   ofi_threshold: 0.75
-  print_multiplier: 100.0
+  print_multiplier: 289.0
   print_window: 150
   ofi_levels: 5
   cooldown_seconds: 90
   post_close_cooldown_seconds: 120
   max_hold_minutes: 60
   tick_size: 0.5
-  stop_ticks: 82
-  breakeven_ticks: 70
+  stop_ticks: 84
+  breakeven_ticks: 71
   max_position_lots: 1
-  take_profit_ticks: 246
+  take_profit_ticks: 252
   trading_hours:
     start: '10:05'
     end: '18:30'
@@ -116,7 +116,7 @@ GAZP:
   lot_size: 10
   commission_rate: 0.0004
   ofi_threshold: 0.72
-  print_multiplier: 100.0
+  print_multiplier: 714.3
   print_window: 200
   ofi_levels: 5
   cooldown_seconds: 60
