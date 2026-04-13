@@ -51,6 +51,8 @@ def _form_to_params(form) -> dict:
         "skip_first_minutes": int(form.get("skip_first_minutes", 5)),
         "ofi_scale": float(form.get("ofi_scale", 1000.0)),
         "trend_ma_window": int(form.get("trend_ma_window", 1000)),
+        "min_ofi_entry_confirmations": int(form.get("min_ofi_entry_confirmations", 1)),
+        "trailing_stop_ticks": int(form.get("trailing_stop_ticks", 0)),
     }
 
 
@@ -147,6 +149,8 @@ def add():
             "skip_first_minutes": 5,
             "ofi_scale": 1000,
             "trend_ma_window": 1000,
+            "min_ofi_entry_confirmations": 1,
+            "trailing_stop_ticks": 0,
         }
         _save_yaml(yaml_config)
         _upsert_db(ticker, yaml_config[ticker])

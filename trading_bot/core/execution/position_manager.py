@@ -37,6 +37,8 @@ class OpenPosition:
     current_price: float = 0.0
     # Флаг: стоп перенесён на цену входа (безубыток активирован)
     stop_at_breakeven: bool = False
+    # Лучшая цена за время жизни позиции (для трейлинг-стопа)
+    peak_price: float = 0.0
 
     @property
     def unrealized_pnl(self) -> float:
@@ -184,6 +186,7 @@ class PositionManager:
             open_at=datetime.utcnow(),
             open_order_id=order.id,
             signal_id=signal_id,
+            peak_price=entry_price,
         )
 
         # Сообщаем стратегии о новой позиции — она начнёт следить за выходом
@@ -338,7 +341,11 @@ class PositionManager:
             return
 
         tick_size = self.params.get("tick_size", 0.01)
+        stop_ticks = self.params.get("stop_ticks", 30)
+        trailing_stop_ticks = self.params.get("trailing_stop_ticks", 0)
         pos = self._position
+
+        from trading_bot.core.strategy.base_strategy import Signal, SignalType, SignalReason
 
         if pos.direction == "long":
             loss_distance = pos.entry_price - current_price
@@ -347,42 +354,33 @@ class PositionManager:
             loss_distance = current_price - pos.entry_price
             gain_distance = pos.entry_price - current_price
 
-        # ── Безубыток ────────────────────────────────────────────────────────
-        breakeven_ticks = self.params.get("breakeven_ticks", 0)
-        if breakeven_ticks > 0 and not pos.stop_at_breakeven:
-            if gain_distance >= breakeven_ticks * tick_size:
-                pos.stop_at_breakeven = True
-                logger.info(
-                    f"БЕЗУБЫТОК активирован: цена прошла {breakeven_ticks} тиков в пользу позиции"
-                )
+        # ── Трейлинг-стоп (заменяет безубыток если включён) ─────────────────
+        if trailing_stop_ticks > 0:
+            trail_distance = trailing_stop_ticks * tick_size
+            initial_stop_distance = stop_ticks * tick_size
 
-        # ── Стоп-лосс ────────────────────────────────────────────────────────
-        from trading_bot.core.strategy.base_strategy import Signal, SignalType, SignalReason
-        if pos.stop_at_breakeven:
-            if loss_distance > 0:
-                logger.info(f"БЕЗУБЫТОК сработал: цена вернулась за точку входа {pos.entry_price:.2f}")
-                db_signal = repository.save_signal(
-                    instrument_id=self.instrument_id,
-                    signal_type="exit",
-                    ofi_value=self.strategy.current_ofi or 0.0,
-                    print_volume=None,
-                    print_side=None,
-                    reason="breakeven_stop",
-                    acted_on=True,
-                )
-                self._close_position(
-                    Signal(signal_type=SignalType.EXIT, reason=SignalReason.STOP_LOSS),
-                    db_signal.id,
-                    exit_reason="breakeven_stop",
-                )
-                return
-        else:
-            stop_ticks = self.params.get("stop_ticks", 30)
-            stop_distance = stop_ticks * tick_size
-            if loss_distance >= stop_distance:
+            # Обновляем лучшую цену
+            if pos.direction == "long":
+                if current_price > pos.peak_price:
+                    pos.peak_price = current_price
+                trailing_stop_price = pos.peak_price - trail_distance
+                initial_stop_price  = pos.entry_price - initial_stop_distance
+                stop_price = max(initial_stop_price, trailing_stop_price)
+                triggered = current_price <= stop_price
+            else:
+                if current_price < pos.peak_price:
+                    pos.peak_price = current_price
+                trailing_stop_price = pos.peak_price + trail_distance
+                initial_stop_price  = pos.entry_price + initial_stop_distance
+                stop_price = min(initial_stop_price, trailing_stop_price)
+                triggered = current_price >= stop_price
+
+            if triggered:
+                gave_back = abs(pos.peak_price - current_price) / tick_size
                 logger.info(
-                    f"СТОП-ЛОСС: движение против позиции {loss_distance:.4f} >= {stop_distance:.4f} "
-                    f"({stop_ticks} тиков)"
+                    f"ТРЕЙЛИНГ-СТОП: пик={pos.peak_price:.4f}, "
+                    f"стоп={stop_price:.4f}, цена={current_price:.4f} "
+                    f"(откат {gave_back:.1f} тиков)"
                 )
                 db_signal = repository.save_signal(
                     instrument_id=self.instrument_id,
@@ -390,15 +388,67 @@ class PositionManager:
                     ofi_value=self.strategy.current_ofi or 0.0,
                     print_volume=None,
                     print_side=None,
-                    reason="stop_loss",
+                    reason="trailing_stop",
                     acted_on=True,
                 )
                 self._close_position(
-                    Signal(signal_type=SignalType.EXIT, reason=SignalReason.STOP_LOSS),
+                    Signal(signal_type=SignalType.EXIT, reason=SignalReason.TRAILING_STOP),
                     db_signal.id,
-                    exit_reason="stop_loss",
+                    exit_reason="trailing_stop",
                 )
                 return
+
+        else:
+            # ── Безубыток (классический режим) ───────────────────────────────
+            breakeven_ticks = self.params.get("breakeven_ticks", 0)
+            if breakeven_ticks > 0 and not pos.stop_at_breakeven:
+                if gain_distance >= breakeven_ticks * tick_size:
+                    pos.stop_at_breakeven = True
+                    logger.info(
+                        f"БЕЗУБЫТОК активирован: цена прошла {breakeven_ticks} тиков в пользу позиции"
+                    )
+
+            # ── Стоп-лосс ────────────────────────────────────────────────────
+            if pos.stop_at_breakeven:
+                if loss_distance > 0:
+                    logger.info(f"БЕЗУБЫТОК сработал: цена вернулась за точку входа {pos.entry_price:.2f}")
+                    db_signal = repository.save_signal(
+                        instrument_id=self.instrument_id,
+                        signal_type="exit",
+                        ofi_value=self.strategy.current_ofi or 0.0,
+                        print_volume=None,
+                        print_side=None,
+                        reason="breakeven_stop",
+                        acted_on=True,
+                    )
+                    self._close_position(
+                        Signal(signal_type=SignalType.EXIT, reason=SignalReason.STOP_LOSS),
+                        db_signal.id,
+                        exit_reason="breakeven_stop",
+                    )
+                    return
+            else:
+                stop_distance = stop_ticks * tick_size
+                if loss_distance >= stop_distance:
+                    logger.info(
+                        f"СТОП-ЛОСС: движение против позиции {loss_distance:.4f} >= {stop_distance:.4f} "
+                        f"({stop_ticks} тиков)"
+                    )
+                    db_signal = repository.save_signal(
+                        instrument_id=self.instrument_id,
+                        signal_type="exit",
+                        ofi_value=self.strategy.current_ofi or 0.0,
+                        print_volume=None,
+                        print_side=None,
+                        reason="stop_loss",
+                        acted_on=True,
+                    )
+                    self._close_position(
+                        Signal(signal_type=SignalType.EXIT, reason=SignalReason.STOP_LOSS),
+                        db_signal.id,
+                        exit_reason="stop_loss",
+                    )
+                    return
 
         # ── Тейк-профит ──────────────────────────────────────────────────────
         take_profit_ticks = self.params.get("take_profit_ticks", 0)

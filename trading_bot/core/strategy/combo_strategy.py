@@ -72,11 +72,17 @@ class ComboStrategy(BaseStrategy):
         # Последнее рассчитанное OFI (для логгирования и отладки)
         self._current_ofi: Optional[float] = None
 
-        # Счётчик последовательных подтверждений разворота OFI.
+        # Счётчик последовательных подтверждений разворота OFI для ВЫХОДА.
         # Увеличивается на каждый апдейт стакана, где OFI против позиции.
         # Сбрасывается, когда OFI перестаёт быть против позиции или при открытии
         # новой позиции. Выход разрешён только при достижении min_ofi_confirmations.
         self._ofi_exit_confirmations: int = 0
+
+        # Счётчик и направление подтверждений OFI для ВХОДА.
+        # OFI должен держаться выше порога N снимков подряд перед генерацией сигнала.
+        # Симметрично логике выхода, защищает от входа на кратковременных всплесках.
+        self._ofi_entry_confirmations: int = 0
+        self._ofi_entry_direction: Optional[str] = None  # "long" / "short"
 
         # Фильтр тренда: скользящая средняя mid-цен.
         # trend_ma_window > 0 — включён; 0 — отключён.
@@ -217,18 +223,42 @@ class ComboStrategy(BaseStrategy):
             return None
 
         # ── Фильтр тренда ─────────────────────────────────────────────────
-        # Если trend_ma_window задан, блокируем входы против тренда.
-        # LONG разрешён только когда текущий mid > MA (восходящий тренд).
-        # SHORT разрешён только когда текущий mid < MA (нисходящий тренд).
         trend_ma: Optional[float] = None
         if self._mid_history is not None and self._current_mid is not None:
             if len(self._mid_history) < self._trend_ma_window:
-                # Окно ещё не заполнено — ждём накопления данных
                 return None
             trend_ma = sum(self._mid_history) / len(self._mid_history)
 
+        # ── Подтверждения OFI для входа ───────────────────────────────────
+        # OFI должен держаться выше порога min_ofi_entry_confirmations снимков подряд.
+        # Защита от входа на кратковременных всплесках стакана.
+        min_entry_conf = self.params.get("min_ofi_entry_confirmations", 1)
+
+        if ofi >= threshold:
+            ofi_candidate = "long"
+        elif ofi <= -threshold:
+            ofi_candidate = "short"
+        else:
+            # OFI не достигает порога ни в одну сторону — сбрасываем счётчик
+            self._ofi_entry_confirmations = 0
+            self._ofi_entry_direction = None
+            return None
+
+        if self._ofi_entry_direction == ofi_candidate:
+            self._ofi_entry_confirmations += 1
+        else:
+            self._ofi_entry_confirmations = 1
+            self._ofi_entry_direction = ofi_candidate
+
+        if self._ofi_entry_confirmations < min_entry_conf:
+            logger.debug(
+                f"OFI {ofi_candidate.upper()} подтверждений: "
+                f"{self._ofi_entry_confirmations}/{min_entry_conf}"
+            )
+            return None
+
         # ── Условие LONG ──────────────────────────────────────────────────
-        if ofi >= threshold and last_print.side == "buy":
+        if ofi_candidate == "long" and last_print.side == "buy":
             if trend_ma is not None and self._current_mid <= trend_ma:
                 logger.debug(
                     f"LONG заблокирован фильтром тренда: "
@@ -236,12 +266,14 @@ class ComboStrategy(BaseStrategy):
                 )
                 return None
             logger.info(
-                f"LONG сигнал: OFI={ofi:.3f} >= {threshold}, "
+                f"LONG сигнал: OFI={ofi:.3f} >= {threshold} "
+                f"({self._ofi_entry_confirmations} подтверждений), "
                 f"принт buy x{last_print.multiplier} @ {last_print.price:.2f}"
                 + (f", mid={self._current_mid:.4f} > MA={trend_ma:.4f}" if trend_ma else "")
             )
             self._last_signal_time = timestamp
-            # После использования сигнала сбрасываем принт
+            self._ofi_entry_confirmations = 0
+            self._ofi_entry_direction = None
             self.print_detector.clear_last_print()
             return Signal(
                 signal_type=SignalType.LONG,
@@ -253,7 +285,7 @@ class ComboStrategy(BaseStrategy):
             )
 
         # ── Условие SHORT ─────────────────────────────────────────────────
-        if ofi <= -threshold and last_print.side == "sell":
+        if ofi_candidate == "short" and last_print.side == "sell":
             if trend_ma is not None and self._current_mid >= trend_ma:
                 logger.debug(
                     f"SHORT заблокирован фильтром тренда: "
@@ -261,11 +293,14 @@ class ComboStrategy(BaseStrategy):
                 )
                 return None
             logger.info(
-                f"SHORT сигнал: OFI={ofi:.3f} <= -{threshold}, "
+                f"SHORT сигнал: OFI={ofi:.3f} <= -{threshold} "
+                f"({self._ofi_entry_confirmations} подтверждений), "
                 f"принт sell x{last_print.multiplier} @ {last_print.price:.2f}"
                 + (f", mid={self._current_mid:.4f} < MA={trend_ma:.4f}" if trend_ma else "")
             )
             self._last_signal_time = timestamp
+            self._ofi_entry_confirmations = 0
+            self._ofi_entry_direction = None
             self.print_detector.clear_last_print()
             return Signal(
                 signal_type=SignalType.SHORT,
@@ -428,6 +463,8 @@ class ComboStrategy(BaseStrategy):
         # При открытии новой позиции — старый счётчик неактуален.
         # При закрытии — тем более.
         self._ofi_exit_confirmations = 0
+        self._ofi_entry_confirmations = 0
+        self._ofi_entry_direction = None
         # Запоминаем время закрытия для post_close_cooldown
         if prev_direction is not None and direction is None:
             self._last_close_time = close_time or datetime.utcnow()
@@ -447,6 +484,8 @@ class ComboStrategy(BaseStrategy):
         self._last_signal_time = None
         self._current_ofi = None
         self._ofi_exit_confirmations = 0
+        self._ofi_entry_confirmations = 0
+        self._ofi_entry_direction = None
         self._last_close_time = None
         if self._mid_history is not None:
             self._mid_history.clear()

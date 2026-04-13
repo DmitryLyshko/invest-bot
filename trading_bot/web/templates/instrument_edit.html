@@ -67,6 +67,10 @@
                 <input type="number" name="ofi_smooth_window" value="{{ params.ofi_smooth_window }}" min="1" style="width: 100%; margin-top: 0.25rem;" required>
             </div>
             <div>
+                <label>Подтверждений для OFI-входа подряд</label>
+                <input type="number" name="min_ofi_entry_confirmations" value="{{ params.min_ofi_entry_confirmations | default(1) }}" min="1" style="width: 100%; margin-top: 0.25rem;" required>
+            </div>
+            <div>
                 <label>Подтверждений для OFI-выхода подряд</label>
                 <input type="number" name="min_ofi_confirmations" value="{{ params.min_ofi_confirmations }}" min="1" style="width: 100%; margin-top: 0.25rem;" required>
             </div>
@@ -107,6 +111,10 @@
             <div>
                 <label>Тейк-профит (тиков) <span style="color:#4a5568">0 = откл</span></label>
                 <input type="number" name="take_profit_ticks" value="{{ params.take_profit_ticks }}" min="0" style="width: 100%; margin-top: 0.25rem;" required>
+            </div>
+            <div>
+                <label>Трейлинг-стоп (тиков) <span style="color:#4a5568">0 = откл (фикс. стоп)</span></label>
+                <input type="number" name="trailing_stop_ticks" value="{{ params.trailing_stop_ticks | default(0) }}" min="0" style="width: 100%; margin-top: 0.25rem;" required>
             </div>
             <div>
                 <label>Макс. удержание позиции (минут)</label>

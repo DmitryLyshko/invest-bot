@@ -22,6 +22,7 @@ class SignalReason(str, Enum):
     TIMEOUT = "timeout"
     STOP_LOSS = "stop_loss"
     TAKE_PROFIT = "take_profit"
+    TRAILING_STOP = "trailing_stop"
     MANUAL = "manual"
 
 

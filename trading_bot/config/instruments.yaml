@@ -26,6 +26,8 @@ SBER:
   min_profit_ticks_for_ofi_exit: 28
   ofi_scale: 1000
   trend_ma_window: 1000
+  min_ofi_entry_confirmations: 3
+  trailing_stop_ticks: 30
 GMKN:
   figi: BBG004731489
   instrument_id: 509edd0c-129c-4ee2-934d-7f6246126da1
@@ -54,6 +56,8 @@ GMKN:
   min_profit_ticks_for_ofi_exit: 7
   ofi_scale: 200
   trend_ma_window: 1000
+  min_ofi_entry_confirmations: 3
+  trailing_stop_ticks: 20
 VTBR:
   figi: BBG004730ZJ9
   instrument_id: 8e2b0325-0292-4654-8a18-4f63ed3b0e09
@@ -82,6 +86,8 @@ VTBR:
   min_profit_ticks_for_ofi_exit: 16
   ofi_scale: 300
   trend_ma_window: 1000
+  min_ofi_entry_confirmations: 3
+  trailing_stop_ticks: 42
 LKOH:
   figi: BBG004731032
   instrument_id: 02cfdf61-6298-4c0f-a9ca-9cabc82afaf3
@@ -110,6 +116,8 @@ LKOH:
   min_profit_ticks_for_ofi_exit: 10
   ofi_scale: 100
   trend_ma_window: 1000
+  min_ofi_entry_confirmations: 4
+  trailing_stop_ticks: 30
 GAZP:
   figi: BBG004730RP0
   instrument_id: 962e2a95-02a9-4171-abd7-aa198dbe643a
@@ -138,3 +146,5 @@ GAZP:
   min_profit_ticks_for_ofi_exit: 12
   ofi_scale: 600
   trend_ma_window: 1000
+  min_ofi_entry_confirmations: 3
+  trailing_stop_ticks: 33

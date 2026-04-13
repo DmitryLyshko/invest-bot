@@ -108,13 +108,15 @@ SBER:
   min_profit_ticks_for_ofi_exit: 28  # OFI-выход блокируется при малой прибыли
   ofi_scale: 1000                    # масштаб tanh-нормализации (подбирается под ликвидность инструмента)
   trend_ma_window: 1000              # окно MA mid-цен для фильтра тренда (0 = выкл)
+  min_ofi_entry_confirmations: 3     # N подряд OFI-чтений выше порога до генерации сигнала входа
   max_position_lots: 1
 
   # Стопы и тейк
   tick_size: 0.01
   stop_ticks: 40
-  breakeven_ticks: 35         # перенести стоп в безубыток после N тиков в плюс
+  breakeven_ticks: 35         # перенести стоп в безубыток после N тиков в плюс (только если trailing_stop_ticks=0)
   take_profit_ticks: 120      # 0 = отключён
+  trailing_stop_ticks: 30     # трейлинг-стоп: отстаёт от пика на N тиков; 0 = откл (используется фикс. стоп+безубыток)
 
   trading_hours: {start: "10:05", end: "18:30"}
   skip_first_minutes: 5
@@ -129,7 +131,7 @@ SBER:
 ```python
 @dataclass Signal:
     signal_type: SignalType   # LONG | SHORT | EXIT
-    reason: SignalReason      # COMBO_TRIGGERED | OFI_REVERSED | TIMEOUT | STOP_LOSS | TAKE_PROFIT | MANUAL
+    reason: SignalReason      # COMBO_TRIGGERED | OFI_REVERSED | TIMEOUT | STOP_LOSS | TAKE_PROFIT | TRAILING_STOP | MANUAL
     ofi_value, print_volume, print_side, timestamp
 
 class BaseStrategy(ABC):
@@ -180,8 +182,9 @@ class ComboStrategy(BaseStrategy):
     reset()
     # property: current_ofi
 ```
-**Вход:** `|OFI| >= ofi_threshold` + принт той же стороны + свежесть принта ≤ **15с** + cooldown + фильтр тренда.
+**Вход:** `|OFI| >= ofi_threshold` на `min_ofi_entry_confirmations` подряд + принт той же стороны + свежесть принта ≤ **15с** + cooldown + фильтр тренда.
 **Фильтр тренда:** если `trend_ma_window > 0` — LONG разрешён только при `mid > MA(N)`, SHORT — при `mid < MA(N)`. Окно накапливает mid-цены из стакана; до заполнения входы блокируются. `0` = отключён.
+**Подтверждения входа:** `_ofi_entry_confirmations` — счётчик последовательных OFI-чтений в одном направлении. При смене направления сбрасывается. Сигнал только при `count >= min_ofi_entry_confirmations`.
 **Выход:** OFI против позиции на `min_ofi_confirmations` подтверждений подряд, `|OFI| >= ofi_exit_threshold`.
 **Защита от преждевременного закрытия:**
 - `_ofi_exit_confirmations` — счётчик сбрасывается если OFI перестаёт быть против позиции
@@ -211,7 +214,8 @@ class OrderManager:
 ```python
 @dataclass OpenPosition:
     direction, entry_price, quantity_lots, open_at, open_order_id, signal_id, current_price
-    stop_at_breakeven: bool    # флаг: безубыток активирован
+    stop_at_breakeven: bool    # флаг: безубыток активирован (только при trailing_stop_ticks=0)
+    peak_price: float          # лучшая цена с момента входа (для трейлинг-стопа)
     # computed: unrealized_pnl, hold_seconds
 
 class PositionManager:
@@ -224,7 +228,8 @@ class PositionManager:
 ```
 **P&L:** `(close - open) * lots * lot_size - commission`. Комиссия суммируется из обоих ордеров.
 **Стоп-лосс:** `stop_ticks * tick_size` (tick_size из конфига, дефолт 0.01).
-**Безубыток:** после движения на `breakeven_ticks` в плюс — стоп переносится на цену входа (`stop_at_breakeven = True`). При возврате за цену входа — закрытие с `exit_reason="breakeven_stop"`.
+**Трейлинг-стоп:** если `trailing_stop_ticks > 0` — стоп следует за ценовым пиком на расстоянии `trailing_stop_ticks * tick_size`. Начальная защита = `stop_ticks` до тех пор, пока трейлинг не обгонит её. `peak_price` обновляется в `OpenPosition` при каждом `update_market_price`. Закрытие с `exit_reason="trailing_stop"`.
+**Безубыток:** используется только если `trailing_stop_ticks=0`. После движения на `breakeven_ticks` в плюс стоп переносится на цену входа (`stop_at_breakeven = True`). При возврате за вход — `exit_reason="breakeven_stop"`.
 **Тейк-профит:** если `take_profit_ticks > 0` и движение в плюс достигло порога — закрытие с `exit_reason="take_profit"`.
 
 ---
@@ -294,7 +299,7 @@ class DataRecorder:
 | `market_orderbooks` | figi, bids(JSON), asks(JSON), recorded_at — индекс по (figi, recorded_at) |
 | `market_trade_ticks` | figi, price, quantity, direction, recorded_at — индекс по (figi, recorded_at) |
 
-`exit_reason` значения в `trades`: `ofi_reversed`, `timeout`, `stop_loss`, `breakeven_stop`, `take_profit`, `manual`.
+`exit_reason` значения в `trades`: `ofi_reversed`, `timeout`, `stop_loss`, `breakeven_stop`, `take_profit`, `trailing_stop`, `manual`.
 
 ### `repository.py` — все функции
 
@@ -457,8 +462,10 @@ stop_event.wait()      # main thread blocks here
 | Только одна позиция | контролируется `RiskManager._check_no_pyramiding` | |
 | bot_active флаг | `bot_state.bot_active` в БД | переключается через `POST /api/bot/toggle` |
 | Дневной лимит убытков | `DAILY_LOSS_LIMIT_RUB` из `.env` | `repository.get_today_pnl()` |
-| Безубыток | `breakeven_ticks` в конфиге | флаг `stop_at_breakeven` в `OpenPosition` |
+| Безубыток | `breakeven_ticks` в конфиге | флаг `stop_at_breakeven` в `OpenPosition`; игнорируется если `trailing_stop_ticks > 0` |
 | Тейк-профит | `take_profit_ticks` в конфиге | 0 = отключён |
+| Трейлинг-стоп | `trailing_stop_ticks` в конфиге | 0 = отключён; `peak_price` в `OpenPosition` |
+| Подтверждения входа | `min_ofi_entry_confirmations` в конфиге | N последовательных OFI ≥ threshold |
 | Маркет-дата токен | `TINKOFF_MARKET_TOKEN` | fallback на `TINKOFF_TOKEN` если не задан |
 | Запись данных для бэктеста | `RECORD_MARKET_DATA=true` в `.env` | `DataRecorder` → таблицы `market_orderbooks`, `market_trade_ticks` |
 | Мультитикер | реализован | все тикеры из `instruments.yaml`, каждый в своём потоке |
