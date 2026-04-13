@@ -1,6 +1,6 @@
 SBER:
-  figi: "BBG004730N88"
-  instrument_id: "e6123145-9665-43e0-8413-cd61b8aa9b13"
+  figi: BBG004730N88
+  instrument_id: e6123145-9665-43e0-8413-cd61b8aa9b13
   lot_size: 10
   commission_rate: 0.0004
   ofi_threshold: 0.75
@@ -11,31 +11,24 @@ SBER:
   post_close_cooldown_seconds: 90
   max_hold_minutes: 60
   tick_size: 0.01
-  stop_ticks: 40
-  breakeven_ticks: 35
+  stop_ticks: 86
+  breakeven_ticks: 73
   max_position_lots: 1
-  take_profit_ticks: 120
+  take_profit_ticks: 258
   trading_hours:
-    start: "10:05"
-    end: "18:30"
+    start: '10:05'
+    end: '18:30'
   skip_first_minutes: 5
   ofi_smooth_window: 12
   min_hold_seconds: 120
   ofi_exit_threshold: 0.5
   min_ofi_confirmations: 4
   min_profit_ticks_for_ofi_exit: 28
-  # Масштаб нормализации OFI: tanh(raw / ofi_scale).
-  # SBER: lot_size=10, очень ликвидный, типичный объём на уровне ~100-500 лотов.
-  # При raw OFI ≈ ofi_scale значение tanh ≈ 0.76 (у порога срабатывания).
   ofi_scale: 1000
-  # Фильтр тренда: MA по mid-ценам из стакана (в снимках).
-  # SBER: ~5-10 снимков/сек → 1000 снимков ≈ 100-200 сек ≈ 2-3 мин тренда.
-  # 0 = отключён.
   trend_ma_window: 1000
-
 GMKN:
-  figi: "BBG004731489"
-  instrument_id: "509edd0c-129c-4ee2-934d-7f6246126da1"
+  figi: BBG004731489
+  instrument_id: 509edd0c-129c-4ee2-934d-7f6246126da1
   lot_size: 10
   commission_rate: 0.0004
   ofi_threshold: 0.75
@@ -46,30 +39,27 @@ GMKN:
   post_close_cooldown_seconds: 120
   max_hold_minutes: 60
   tick_size: 0.02
-  stop_ticks: 10
-  breakeven_ticks: 8
+  stop_ticks: 58
+  breakeven_ticks: 49
   max_position_lots: 1
-  take_profit_ticks: 30
+  take_profit_ticks: 174
   trading_hours:
-    start: "10:05"
-    end: "18:30"
+    start: '10:05'
+    end: '18:30'
   skip_first_minutes: 5
   ofi_smooth_window: 12
   min_hold_seconds: 120
   ofi_exit_threshold: 0.5
   min_ofi_confirmations: 4
   min_profit_ticks_for_ofi_exit: 7
-  # GMKN: lot_size=10, менее ликвиден чем SBER, типичный объём ~20-100 лотов/уровень.
   ofi_scale: 200
-  # GMKN: ~3-5 снимков/сек → 1000 снимков ≈ 200-333 сек ≈ 3-5 мин тренда.
   trend_ma_window: 1000
-
 VTBR:
-  figi: "BBG004730ZJ9"
-  instrument_id: "8e2b0325-0292-4654-8a18-4f63ed3b0e09"
+  figi: BBG004730ZJ9
+  instrument_id: 8e2b0325-0292-4654-8a18-4f63ed3b0e09
   lot_size: 1
   commission_rate: 0.0004
-  ofi_threshold: 0.70
+  ofi_threshold: 0.7
   print_multiplier: 12.0
   print_window: 300
   ofi_levels: 5
@@ -77,28 +67,24 @@ VTBR:
   post_close_cooldown_seconds: 90
   max_hold_minutes: 60
   tick_size: 0.005
-  stop_ticks: 25
-  breakeven_ticks: 20
+  stop_ticks: 122
+  breakeven_ticks: 104
   max_position_lots: 1
-  take_profit_ticks: 75
+  take_profit_ticks: 366
   trading_hours:
-    start: "10:05"
-    end: "18:30"
+    start: '10:05'
+    end: '18:30'
   skip_first_minutes: 5
   ofi_smooth_window: 15
   min_hold_seconds: 120
   ofi_exit_threshold: 0.5
   min_ofi_confirmations: 4
   min_profit_ticks_for_ofi_exit: 16
-  # VTBR: lot_size=1, цена ~91 руб, высокий оборот в штуках.
-  # Типичный объём на уровне ~500-2000 лотов → scale ниже чем SBER.
   ofi_scale: 300
-  # VTBR: ~4-8 снимков/сек → 1000 снимков ≈ 125-250 сек ≈ 2-4 мин тренда.
   trend_ma_window: 1000
-
 LKOH:
-  figi: "BBG004731032"
-  instrument_id: "02cfdf61-6298-4c0f-a9ca-9cabc82afaf3"
+  figi: BBG004731032
+  instrument_id: 02cfdf61-6298-4c0f-a9ca-9cabc82afaf3
   lot_size: 1
   commission_rate: 0.0004
   ofi_threshold: 0.75
@@ -109,28 +95,24 @@ LKOH:
   post_close_cooldown_seconds: 120
   max_hold_minutes: 60
   tick_size: 0.5
-  stop_ticks: 15
-  breakeven_ticks: 12
+  stop_ticks: 82
+  breakeven_ticks: 70
   max_position_lots: 1
-  take_profit_ticks: 45
+  take_profit_ticks: 246
   trading_hours:
-    start: "10:05"
-    end: "18:30"
+    start: '10:05'
+    end: '18:30'
   skip_first_minutes: 5
   ofi_smooth_window: 15
   min_hold_seconds: 180
   ofi_exit_threshold: 0.55
   min_ofi_confirmations: 5
   min_profit_ticks_for_ofi_exit: 10
-  # LKOH: lot_size=1, цена ~5400 руб, низколиквидный.
-  # Типичный объём на уровне ~5-30 лотов → очень маленький scale.
   ofi_scale: 100
-  # LKOH: ~1-3 снимков/сек → 1000 снимков ≈ 5-15 мин тренда.
   trend_ma_window: 1000
-
 GAZP:
-  figi: "BBG004730RP0"
-  instrument_id: "962e2a95-02a9-4171-abd7-aa198dbe643a"
+  figi: BBG004730RP0
+  instrument_id: 962e2a95-02a9-4171-abd7-aa198dbe643a
   lot_size: 10
   commission_rate: 0.0004
   ofi_threshold: 0.72
@@ -141,51 +123,18 @@ GAZP:
   post_close_cooldown_seconds: 90
   max_hold_minutes: 60
   tick_size: 0.01
-  stop_ticks: 20
-  breakeven_ticks: 16
+  stop_ticks: 95
+  breakeven_ticks: 81
   max_position_lots: 1
-  take_profit_ticks: 60
+  take_profit_ticks: 285
   trading_hours:
-    start: "10:05"
-    end: "18:30"
+    start: '10:05'
+    end: '18:30'
   skip_first_minutes: 5
   ofi_smooth_window: 12
   min_hold_seconds: 120
   ofi_exit_threshold: 0.5
   min_ofi_confirmations: 4
   min_profit_ticks_for_ofi_exit: 12
-  # GAZP: lot_size=10, цена ~130 руб, умеренная ликвидность.
-  # Типичный объём на уровне ~50-300 лотов.
   ofi_scale: 600
-  # GAZP: ~4-8 снимков/сек → 1000 снимков ≈ 125-250 сек ≈ 2-4 мин тренда.
   trend_ma_window: 1000
-
-# Шаблон для добавления нового инструмента:
-# TICKER:
-#   figi: "..."
-#   instrument_id: "..."
-#   lot_size: 1
-#   commission_rate: 0.0004
-#   ofi_threshold: 0.7
-#   print_multiplier: 8.0
-#   print_window: 200
-#   ofi_levels: 5
-#   cooldown_seconds: 60
-#   post_close_cooldown_seconds: 90
-#   max_hold_minutes: 60
-#   tick_size: 0.01
-#   stop_ticks: 20
-#   breakeven_ticks: 16
-#   max_position_lots: 1
-#   take_profit_ticks: 60
-#   trading_hours:
-#     start: "10:05"
-#     end: "18:30"
-#   skip_first_minutes: 5
-#   ofi_smooth_window: 12
-#   min_hold_seconds: 120
-#   ofi_exit_threshold: 0.5
-#   min_ofi_confirmations: 4
-#   min_profit_ticks_for_ofi_exit: 10
-#   ofi_scale: 500    # подобрать под ликвидность инструмента
-#   trend_ma_window: 1000
