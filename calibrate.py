@@ -34,8 +34,10 @@ ATR_MULT = 1.5           # stop = ATR * ATR_MULT
 BREAKEVEN_RATIO = 0.85   # breakeven = stop * BREAKEVEN_RATIO
 TP_RATIO = 3             # take_profit = stop * TP_RATIO  (1:3 risk/reward)
 CANDLE_DAYS = 6          # сколько календарных дней свечей тянуть (часовые: лимит 1 неделя)
-TARGET_PRINTS_PER_DAY = 5   # желаемое кол-во крупных принтов в день (для print_multiplier)
+PRINT_PERCENTILE = 99.0     # какой процентиль объёма считать "крупным принтом" (для print_multiplier)
+PRINT_MAX_MULTIPLIER = 50.0 # верхняя граница: выше не имеет смысла для реальной торговли
 DB_HISTORY_DAYS = 5      # сколько дней market_trade_ticks использовать для print_multiplier
+                         # нужно ≥500 сделок на инструмент за этот период
 
 
 # ─── Загрузка окружения ────────────────────────────────────────────────────────
@@ -106,10 +108,13 @@ def suggest_print_multiplier(figi: str) -> Optional[float]:
     """
     Предложить print_multiplier на основе данных market_trade_ticks в БД.
 
-    Ищет мультипликатор при котором в среднем TARGET_PRINTS_PER_DAY
-    сделок в день превышают медиану * multiplier.
+    Логика: находим PRINT_PERCENTILE-й процентиль объёмов сделок и делим на медиану.
+    Это даёт мультипликатор при котором сигнал генерируется примерно в (100-PRINT_PERCENTILE)%
+    случаев — то есть действительно аномально крупные сделки.
 
-    Возвращает None если данных недостаточно.
+    Пример: медиана=2 лота, 99-й процентиль=30 лотов → print_multiplier=15.0
+
+    Возвращает None если данных недостаточно или результат за разумными пределами.
     """
     try:
         from trading_bot.db.repository import get_session
@@ -124,42 +129,38 @@ def suggest_print_multiplier(figi: str) -> Optional[float]:
                 MarketTradeTick.recorded_at >= cutoff,
             ).scalar() or 0
 
-            if total < 200:
+            if total < 500:
+                print(f"    (print_multiplier: мало данных — {total} сделок, нужно ≥500)")
                 return None
 
-            volumes = [
+            volumes = sorted(
                 row[0] for row in
                 session.query(MarketTradeTick.quantity).filter(
                     MarketTradeTick.figi == figi,
                     MarketTradeTick.recorded_at >= cutoff,
                 ).all()
-            ]
+            )
 
-        volumes_sorted = sorted(volumes)
-        n = len(volumes_sorted)
-        median = volumes_sorted[n // 2] if n % 2 else (volumes_sorted[n // 2 - 1] + volumes_sorted[n // 2]) / 2
-
+        n = len(volumes)
+        # Медиана
+        median = volumes[n // 2] if n % 2 else (volumes[n // 2 - 1] + volumes[n // 2]) / 2
         if median <= 0:
             return None
 
-        target_total = TARGET_PRINTS_PER_DAY * DB_HISTORY_DAYS
+        # PRINT_PERCENTILE-й процентиль
+        idx = min(int(n * PRINT_PERCENTILE / 100), n - 1)
+        p_vol = volumes[idx]
 
-        # Бинарный поиск мультипликатора
-        lo, hi = 1.0, 1000.0
-        for _ in range(30):
-            mid = (lo + hi) / 2
-            count_prints = sum(1 for v in volumes if v >= median * mid)
-            if count_prints > target_total:
-                lo = mid
-            else:
-                hi = mid
+        result = round(p_vol / median, 1)
 
-        result = round((lo + hi) / 2, 1)
-
-        # Если результат на верхней границе — данных недостаточно или распределение нестандартное
-        if result >= 950.0:
-            print(f"    (print_multiplier: результат у верхней границы, пропускаем)")
+        # Проверки на адекватность
+        if result < 2.0:
+            print(f"    (print_multiplier: слишком маленький {result}, пропускаем)")
             return None
+        if result > PRINT_MAX_MULTIPLIER:
+            print(f"    (print_multiplier: {result} > cap {PRINT_MAX_MULTIPLIER}, "
+                  f"используем cap — очень скошенное распределение объёмов)")
+            return PRINT_MAX_MULTIPLIER
 
         return result
 

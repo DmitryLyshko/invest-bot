@@ -4,7 +4,7 @@ SBER:
   lot_size: 10
   commission_rate: 0.0004
   ofi_threshold: 0.75
-  print_multiplier: 100.0
+  print_multiplier: 10.0
   print_window: 200
   ofi_levels: 5
   cooldown_seconds: 60
@@ -32,7 +32,7 @@ GMKN:
   lot_size: 10
   commission_rate: 0.0004
   ofi_threshold: 0.75
-  print_multiplier: 613.6
+  print_multiplier: 8.0
   print_window: 200
   ofi_levels: 5
   cooldown_seconds: 90
@@ -60,7 +60,7 @@ VTBR:
   lot_size: 1
   commission_rate: 0.0004
   ofi_threshold: 0.7
-  print_multiplier: 100.0
+  print_multiplier: 12.0
   print_window: 300
   ofi_levels: 5
   cooldown_seconds: 60
@@ -88,7 +88,7 @@ LKOH:
   lot_size: 1
   commission_rate: 0.0004
   ofi_threshold: 0.75
-  print_multiplier: 289.0
+  print_multiplier: 8.0
   print_window: 150
   ofi_levels: 5
   cooldown_seconds: 90
@@ -116,7 +116,7 @@ GAZP:
   lot_size: 10
   commission_rate: 0.0004
   ofi_threshold: 0.72
-  print_multiplier: 714.3
+  print_multiplier: 10.0
   print_window: 200
   ofi_levels: 5
   cooldown_seconds: 60
