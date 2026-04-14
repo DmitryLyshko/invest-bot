@@ -12,14 +12,14 @@
   LONG:  OFI >= +threshold И последний принт был на покупку
   SHORT: OFI <= -threshold И последний принт был на продажу
 
-Логика выхода (Вариант 2 — разворот OFI):
-  Выходим когда OFI развернулся против позиции:
-  - Открыта LONG, OFI <= -threshold → продавцы перехватили инициативу → выходим
-  - Открыта SHORT, OFI >= +threshold → покупатели перехватили → выходим
+Логика выхода:
+  Выход только через stop-loss / take-profit / trailing-stop / timeout (PositionManager).
+  OFI-разворот как причина выхода — отключён.
 
-  Этот подход адаптивен: не фиксирует прибыль слишком рано (ждёт реального
-  разворота потока), не держит убыточную позицию бесконечно (OFI разворачивается
-  быстро при смене настроения).
+Фильтр активности рынка:
+  Если диапазон mid-цены за последние activity_window снапшотов стакана
+  меньше min_activity_range_ticks * tick_size — рынок "стоит", входы блокируются.
+  Параметры: activity_window (default 0 = выкл), min_activity_range_ticks (default 0).
 """
 import logging
 from collections import deque
@@ -72,12 +72,6 @@ class ComboStrategy(BaseStrategy):
 
         # Последнее рассчитанное OFI (для логгирования и отладки)
         self._current_ofi: Optional[float] = None
-
-        # Счётчик последовательных подтверждений разворота OFI для ВЫХОДА.
-        # Увеличивается на каждый апдейт стакана, где OFI против позиции.
-        # Сбрасывается, когда OFI перестаёт быть против позиции или при открытии
-        # новой позиции. Выход разрешён только при достижении min_ofi_confirmations.
-        self._ofi_exit_confirmations: int = 0
 
         # Счётчик и направление подтверждений OFI для ВХОДА.
         # OFI должен держаться выше порога N снимков подряд перед генерацией сигнала.
@@ -153,7 +147,6 @@ class ComboStrategy(BaseStrategy):
             self._current_mid = (best_bid + best_ask) / 2
             if self._mid_history is not None:
                 self._mid_history.append(self._current_mid)
-
         # Пересчитываем OFI
         ofi = self.ofi_calc.update(bids, asks)
         if ofi is None:
@@ -166,13 +159,6 @@ class ComboStrategy(BaseStrategy):
         # Проверяем торговые часы
         if not self._is_trading_hours(timestamp):
             return
-
-        # ── Логика выхода (приоритет над входом) ──────────────────────────
-        if self._open_position_direction is not None:
-            exit_signal = self._check_exit_condition(ofi, timestamp)
-            if exit_signal is not None:
-                self._pending_signal = exit_signal
-                return
 
         # ── Логика входа (только если нет позиции) ────────────────────────
         if self._open_position_direction is None:
@@ -319,88 +305,6 @@ class ComboStrategy(BaseStrategy):
 
         return None
 
-    def _check_exit_condition(self, ofi: float, timestamp: datetime) -> Optional[Signal]:
-        """
-        Проверить условие выхода из позиции.
-
-        Три уровня защиты от преждевременного закрытия:
-
-        1. Минимальное время удержания (min_hold_seconds):
-           Позиция не может быть закрыта по OFI раньше этого порога.
-           Защита от мгновенного флипа стакана сразу после входа.
-
-        2. Порог OFI для выхода (ofi_exit_threshold):
-           Отдельный порог, может быть ниже порога входа. OFI должен
-           уверенно указывать против позиции, не просто быть отрицательным.
-
-        3. Подтверждения подряд (min_ofi_confirmations):
-           OFI должен быть против позиции на N последовательных апдейтах
-           стакана. Один случайный флип не закрывает позицию.
-        """
-        # Порог выхода из конфига; по умолчанию — половина порога входа
-        # (обратная совместимость со старыми конфигами без нового параметра)
-        exit_threshold = self.params.get(
-            "ofi_exit_threshold",
-            self.params["ofi_threshold"] * 0.5,
-        )
-
-        # Проверяем, направлен ли OFI против текущей позиции
-        ofi_is_against = self._is_ofi_against_position(ofi, exit_threshold)
-
-        if not ofi_is_against:
-            # OFI не против позиции — сбрасываем счётчик подтверждений.
-            # Позиция может "выдохнуть" и восстановиться без накопленного счётчика.
-            if self._ofi_exit_confirmations > 0:
-                logger.debug(
-                    f"OFI вернулся в пользу позиции ({ofi:.3f}), "
-                    f"сброс счётчика подтверждений ({self._ofi_exit_confirmations} → 0)"
-                )
-            self._ofi_exit_confirmations = 0
-            return None
-
-        # OFI против позиции — увеличиваем счётчик подтверждений
-        self._ofi_exit_confirmations += 1
-        required_confirmations = self.params.get("min_ofi_confirmations", 1)
-
-        logger.debug(
-            f"OFI против позиции: {ofi:.3f}, подтверждений: "
-            f"{self._ofi_exit_confirmations}/{required_confirmations}"
-        )
-
-        if self._ofi_exit_confirmations < required_confirmations:
-            # Ещё не набрали нужное количество подтверждений — ждём
-            return None
-
-        # Достаточно подтверждений — генерируем сигнал выхода
-        direction = self._open_position_direction
-        logger.info(
-            f"EXIT {direction.upper()}: OFI={ofi:.3f} против позиции "
-            f"на {self._ofi_exit_confirmations} апдейтах подряд "
-            f"(порог={exit_threshold:.3f}, требуется={required_confirmations})"
-        )
-        self._ofi_exit_confirmations = 0
-        return Signal(
-            signal_type=SignalType.EXIT,
-            reason=SignalReason.OFI_REVERSED,
-            ofi_value=ofi,
-            timestamp=timestamp,
-        )
-
-    def _is_ofi_against_position(self, ofi: float, threshold: float) -> bool:
-        """
-        Проверить, направлен ли OFI против текущей открытой позиции.
-
-        Для LONG позиции OFI "против" = значение ниже -threshold
-        (продавцы перехватили инициативу).
-        Для SHORT позиции OFI "против" = значение выше +threshold
-        (покупатели перехватили инициативу).
-        """
-        if self._open_position_direction == "long":
-            return ofi <= -threshold
-        if self._open_position_direction == "short":
-            return ofi >= threshold
-        return False
-
     def _is_trading_hours(self, timestamp: datetime) -> bool:
         """
         Проверить, находимся ли мы в разрешённых торговых часах.
@@ -465,10 +369,7 @@ class ComboStrategy(BaseStrategy):
         """
         prev_direction = self._open_position_direction
         self._open_position_direction = direction
-        # Сбрасываем счётчик подтверждений при любом изменении позиции.
-        # При открытии новой позиции — старый счётчик неактуален.
-        # При закрытии — тем более.
-        self._ofi_exit_confirmations = 0
+        # Сбрасываем счётчик подтверждений входа при любом изменении позиции.
         self._ofi_entry_confirmations = 0
         self._ofi_entry_direction = None
         # Запоминаем время закрытия для post_close_cooldown
@@ -489,7 +390,6 @@ class ComboStrategy(BaseStrategy):
         self._open_position_direction = None
         self._last_signal_time = None
         self._current_ofi = None
-        self._ofi_exit_confirmations = 0
         self._ofi_entry_confirmations = 0
         self._ofi_entry_direction = None
         self._last_close_time = None

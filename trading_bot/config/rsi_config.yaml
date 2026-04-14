@@ -24,6 +24,9 @@ SBER:
   skip_first_minutes: 5
   min_hold_seconds: 300
   min_profit_ticks_for_ofi_exit: 0
+  atr_days: 5
+  atr_length_short: 5
+  atr_ratio_min: 0.7
 
 GMKN:
   length: 14
@@ -47,6 +50,9 @@ GMKN:
   skip_first_minutes: 5
   min_hold_seconds: 300
   min_profit_ticks_for_ofi_exit: 0
+  atr_days: 5
+  atr_length_short: 5
+  atr_ratio_min: 0.7
 
 VTBR:
   length: 14
@@ -70,6 +76,9 @@ VTBR:
   skip_first_minutes: 5
   min_hold_seconds: 300
   min_profit_ticks_for_ofi_exit: 0
+  atr_days: 5
+  atr_length_short: 5
+  atr_ratio_min: 0.7
 
 LKOH:
   length: 14
@@ -93,6 +102,9 @@ LKOH:
   skip_first_minutes: 5
   min_hold_seconds: 300
   min_profit_ticks_for_ofi_exit: 0
+  atr_days: 5
+  atr_length_short: 5
+  atr_ratio_min: 0.7
 
 GAZP:
   length: 14
@@ -116,6 +128,9 @@ GAZP:
   skip_first_minutes: 5
   min_hold_seconds: 300
   min_profit_ticks_for_ofi_exit: 0
+  atr_days: 5
+  atr_length_short: 5
+  atr_ratio_min: 0.7
 
 NVTK:
   length: 14
@@ -139,6 +154,9 @@ NVTK:
   skip_first_minutes: 5
   min_hold_seconds: 300
   min_profit_ticks_for_ofi_exit: 0
+  atr_days: 5
+  atr_length_short: 5
+  atr_ratio_min: 0.7
 
 ROSN:
   length: 14
@@ -162,6 +180,9 @@ ROSN:
   skip_first_minutes: 5
   min_hold_seconds: 300
   min_profit_ticks_for_ofi_exit: 0
+  atr_days: 5
+  atr_length_short: 5
+  atr_ratio_min: 0.7
 
 TATN:
   length: 14
@@ -185,6 +206,9 @@ TATN:
   skip_first_minutes: 5
   min_hold_seconds: 300
   min_profit_ticks_for_ofi_exit: 0
+  atr_days: 5
+  atr_length_short: 5
+  atr_ratio_min: 0.7
 
 YNDX:
   length: 14
@@ -208,6 +232,9 @@ YNDX:
   skip_first_minutes: 5
   min_hold_seconds: 300
   min_profit_ticks_for_ofi_exit: 0
+  atr_days: 5
+  atr_length_short: 5
+  atr_ratio_min: 0.7
 
 PLZL:
   length: 14
@@ -231,6 +258,9 @@ PLZL:
   skip_first_minutes: 5
   min_hold_seconds: 300
   min_profit_ticks_for_ofi_exit: 0
+  atr_days: 5
+  atr_length_short: 5
+  atr_ratio_min: 0.7
 
 CHMF:
   length: 14
@@ -254,6 +284,9 @@ CHMF:
   skip_first_minutes: 5
   min_hold_seconds: 300
   min_profit_ticks_for_ofi_exit: 0
+  atr_days: 5
+  atr_length_short: 5
+  atr_ratio_min: 0.7
 
 NLMK:
   length: 14
@@ -277,6 +310,9 @@ NLMK:
   skip_first_minutes: 5
   min_hold_seconds: 300
   min_profit_ticks_for_ofi_exit: 0
+  atr_days: 5
+  atr_length_short: 5
+  atr_ratio_min: 0.7
 
 MAGN:
   length: 14
@@ -300,6 +336,9 @@ MAGN:
   skip_first_minutes: 5
   min_hold_seconds: 300
   min_profit_ticks_for_ofi_exit: 0
+  atr_days: 5
+  atr_length_short: 5
+  atr_ratio_min: 0.7
 
 ALRS:
   length: 14
@@ -323,6 +362,9 @@ ALRS:
   skip_first_minutes: 5
   min_hold_seconds: 300
   min_profit_ticks_for_ofi_exit: 0
+  atr_days: 5
+  atr_length_short: 5
+  atr_ratio_min: 0.7
 
 MTSS:
   length: 14
@@ -346,6 +388,9 @@ MTSS:
   skip_first_minutes: 5
   min_hold_seconds: 300
   min_profit_ticks_for_ofi_exit: 0
+  atr_days: 5
+  atr_length_short: 5
+  atr_ratio_min: 0.7
 
 SIBN:
   length: 14
@@ -369,6 +414,9 @@ SIBN:
   skip_first_minutes: 5
   min_hold_seconds: 300
   min_profit_ticks_for_ofi_exit: 0
+  atr_days: 5
+  atr_length_short: 5
+  atr_ratio_min: 0.7
 
 AFLT:
   length: 14
@@ -392,6 +440,9 @@ AFLT:
   skip_first_minutes: 5
   min_hold_seconds: 300
   min_profit_ticks_for_ofi_exit: 0
+  atr_days: 5
+  atr_length_short: 5
+  atr_ratio_min: 0.7
 
 MGNT:
   length: 14
@@ -415,6 +466,9 @@ MGNT:
   skip_first_minutes: 5
   min_hold_seconds: 300
   min_profit_ticks_for_ofi_exit: 0
+  atr_days: 5
+  atr_length_short: 5
+  atr_ratio_min: 0.7
 
 MOEX:
   length: 14
@@ -438,6 +492,9 @@ MOEX:
   skip_first_minutes: 5
   min_hold_seconds: 300
   min_profit_ticks_for_ofi_exit: 0
+  atr_days: 5
+  atr_length_short: 5
+  atr_ratio_min: 0.7
 
 PHOR:
   length: 14
@@ -461,3 +518,6 @@ PHOR:
   skip_first_minutes: 5
   min_hold_seconds: 300
   min_profit_ticks_for_ofi_exit: 0
+  atr_days: 5
+  atr_length_short: 5
+  atr_ratio_min: 0.7

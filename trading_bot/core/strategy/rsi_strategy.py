@@ -189,6 +189,10 @@ class RSIStrategy(BaseStrategy):
         self._prev_arsi: Optional[float] = None
         self._prev_signal_line: Optional[float] = None
 
+        # ATR-фильтр активности: обновляется извне каждые 5 минут через update_atr()
+        self._atr_short: Optional[float] = None
+        self._atr_long: Optional[float] = None
+
         super().__init__(instrument_config)
 
     def load_params(self, instrument_config: Dict[str, Any]) -> None:
@@ -219,6 +223,12 @@ class RSIStrategy(BaseStrategy):
         return sig
 
     # ── Position state ────────────────────────────────────────────────────────
+
+    def update_atr(self, short_atr: float, long_atr: float) -> None:
+        """Обновить значения ATR (вызывается из планировщика каждые 5 минут)."""
+        self._atr_short = short_atr
+        self._atr_long = long_atr
+        logger.debug(f"ATR обновлён: short={short_atr:.4f}, long={long_atr:.4f}, ratio={short_atr/long_atr:.2f}" if long_atr > 0 else f"ATR обновлён: short={short_atr:.4f}, long={long_atr:.4f}")
 
     def set_position(
         self,
@@ -281,6 +291,23 @@ class RSIStrategy(BaseStrategy):
 
         if self._last_close_time is not None:
             if (now - self._last_close_time).total_seconds() < post_close_cd:
+                return
+
+        # ATR-фильтр: блокируем вход если рынок неактивен
+        atr_ratio_min = self.params.get("atr_ratio_min", 0.0)
+        if atr_ratio_min > 0:
+            if self._atr_short is None or self._atr_long is None:
+                logger.debug("ATR ещё не загружен, вход заблокирован")
+                return
+            if self._atr_long <= 0:
+                logger.debug("ATR long = 0, вход заблокирован")
+                return
+            ratio = self._atr_short / self._atr_long
+            if ratio < atr_ratio_min:
+                logger.debug(
+                    f"ATR-фильтр: рынок неактивен (short={self._atr_short:.4f}, "
+                    f"long={self._atr_long:.4f}, ratio={ratio:.2f} < {atr_ratio_min})"
+                )
                 return
 
         prev = self._prev_arsi

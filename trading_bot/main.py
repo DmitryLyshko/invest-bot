@@ -15,12 +15,14 @@ import logging
 import signal
 import sys
 import threading
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Optional
 
 import yaml
 from apscheduler.schedulers.background import BackgroundScheduler
-from tinkoff.invest import Client
+from tinkoff.invest import CandleInterval, Client
 from tinkoff.invest.sandbox.client import SandboxClient
+from tinkoff.invest.utils import quotation_to_decimal
 
 from trading_bot.config import settings
 from trading_bot.core.data.data_recorder import DataRecorder
@@ -223,6 +225,62 @@ def make_event_handlers(
     return on_orderbook, on_trade
 
 
+def refresh_rsi_atr(figi: str, strategy: "RSIStrategy", rsi_params: dict) -> None:
+    """
+    Загрузить 5-минутные свечи из T-Invest API и обновить ATR в стратегии.
+    Вызывается из планировщика каждые 5 минут.
+
+    short_atr — средний ATR последних atr_length_short свечей (текущая активность).
+    long_atr  — средний ATR за последние atr_days торговых дней (историческая норма).
+    """
+    logger = logging.getLogger(__name__)
+    atr_ratio_min = rsi_params.get("atr_ratio_min", 0.0)
+    if atr_ratio_min <= 0:
+        return  # фильтр отключён
+
+    atr_short_len = rsi_params.get("atr_length_short", 5)
+    atr_days = rsi_params.get("atr_days", 5)
+
+    # Берём calendar_days с запасом на выходные: 5 торговых дней ≈ 7-8 календарных
+    calendar_days = atr_days + 3
+    now = datetime.now(timezone.utc)
+    from_ = now - timedelta(days=calendar_days)
+
+    try:
+        ClientClass = SandboxClient if settings.USE_SANDBOX else Client
+        with ClientClass(settings.TINKOFF_TOKEN) as client:
+            resp = client.market_data.get_candles(
+                figi=figi,
+                from_=from_,
+                to=now,
+                interval=CandleInterval.CANDLE_INTERVAL_5_MIN,
+            )
+        candles = [c for c in resp.candles if c.is_complete]
+        if len(candles) < atr_short_len:
+            logger.debug(f"ATR refresh {figi}: недостаточно свечей ({len(candles)})")
+            return
+
+        trs = [
+            float(quotation_to_decimal(c.high)) - float(quotation_to_decimal(c.low))
+            for c in candles
+        ]
+
+        short_atr = sum(trs[-atr_short_len:]) / atr_short_len
+        # Базовая норма = среднее по всем свечам за N дней
+        long_atr = sum(trs) / len(trs)
+
+        logger.debug(
+            f"ATR {figi}: short={short_atr:.4f}, "
+            f"5d_avg={long_atr:.4f}, "
+            f"ratio={short_atr/long_atr:.2f} (min={atr_ratio_min})"
+            if long_atr > 0 else f"ATR {figi}: long_atr=0"
+        )
+        strategy.update_atr(short_atr, long_atr)
+
+    except Exception:
+        logger.exception(f"Ошибка при обновлении ATR для {figi}")
+
+
 def run_web(app) -> None:
     app.run(host=settings.WEB_HOST, port=settings.WEB_PORT, use_reloader=False)
 
@@ -365,6 +423,18 @@ def main() -> None:
             minutes=1,
             id=f"rsi_eod_close_{ticker}",
         )
+
+        # ATR-фильтр: обновлять каждые 5 минут
+        if rsi_params.get("atr_ratio_min", 0) > 0:
+            scheduler.add_job(
+                refresh_rsi_atr,
+                "interval",
+                minutes=5,
+                id=f"rsi_atr_refresh_{ticker}",
+                args=[params["figi"], rsi_strategy, rsi_params],
+            )
+            # Сразу загружаем при старте
+            refresh_rsi_atr(params["figi"], rsi_strategy, rsi_params)
 
         rsi_position_manager.recover_position(params["figi"])
         position_managers[rsi_key] = rsi_position_manager

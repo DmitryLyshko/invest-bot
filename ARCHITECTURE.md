@@ -117,8 +117,6 @@ SBER:
   ofi_threshold: 0.75         # порог OFI для входа
   ofi_levels: 5               # топ N уровней стакана
   ofi_smooth_window: 12       # окно сглаживания OFI (апдейтов стакана)
-  ofi_exit_threshold: 0.5     # порог OFI для выхода (независимо от порога входа)
-  min_ofi_confirmations: 4    # подтверждений подряд для выхода по OFI
   print_multiplier: 50.0      # объём >= медиана * multiplier → крупный принт; авто-калибруется ежедневно (calibrate_multipliers.py): target ~p97 = (p95/median + p99/median) / 2, clamp [10, 200], порог обновления 20%
   print_window: 200           # размер окна медианы объёмов
   print_max_age_seconds: 15   # принт старше этого — не считается (15с для ликвидных, 25-30с для неликвидных)
@@ -129,11 +127,11 @@ SBER:
 
   # Управление позицией
   max_hold_minutes: 60
-  min_hold_seconds: 120       # минимальное время до OFI-выхода
-  min_profit_ticks_for_ofi_exit: 28  # OFI-выход блокируется при малой прибыли
   ofi_scale: 1000                    # масштаб tanh-нормализации (подбирается под ликвидность инструмента)
   ofi_auto_calibrate_window: 0       # > 0: первые N снапшотов → p90(|raw_ofi|) заменяет ofi_scale; 0 = откл
   trend_ma_window: 1000              # окно MA mid-цен для фильтра тренда (0 = выкл)
+  activity_window: 50                # окно снапшотов для фильтра активности рынка (0 = выкл)
+  min_activity_range_ticks: 3        # мин. диапазон mid-цены за activity_window снапшотов; если меньше — вход заблокирован (0 = выкл)
   min_ofi_entry_confirmations: 3     # N подряд OFI-чтений выше порога до генерации сигнала входа
   max_position_lots: 500             # жёсткий потолок лотов; не должен мешать расчёту 30% — compute_lots считает долю портфеля динамически
 
@@ -214,14 +212,11 @@ class ComboStrategy(BaseStrategy):
     reset()
     # property: current_ofi
 ```
-**Вход:** `|OFI| >= ofi_threshold` на `min_ofi_entry_confirmations` подряд + принт той же стороны + свежесть принта ≤ **15с** + cooldown + фильтр тренда.
+**Вход:** `|OFI| >= ofi_threshold` на `min_ofi_entry_confirmations` подряд + принт той же стороны + свежесть принта ≤ **15с** + cooldown + фильтр тренда + фильтр активности.
 **Фильтр тренда:** если `trend_ma_window > 0` — LONG разрешён только при `mid > MA(N)`, SHORT — при `mid < MA(N)`. До заполнения окна входы блокируются. `0` = отключён.
+**Фильтр активности рынка:** если `activity_window > 0` и `min_activity_range_ticks > 0` — диапазон mid-цены за последние N снапшотов должен быть ≥ min_range_ticks * tick_size. Если рынок "стоит" — вход блокируется.
 **Подтверждения входа:** `_ofi_entry_confirmations` — счётчик последовательных OFI-чтений в одном направлении. При смене направления сбрасывается. Сигнал только при `count >= min_ofi_entry_confirmations`.
-**Выход:** OFI против позиции на `min_ofi_confirmations` подтверждений подряд, `|OFI| >= ofi_exit_threshold`.
-**Защита от преждевременного закрытия:**
-- `_ofi_exit_confirmations` — счётчик сбрасывается если OFI перестаёт быть против позиции
-- `min_hold_seconds` — блокировка в `PositionManager.on_signal`
-- `min_profit_ticks_for_ofi_exit` — блокировка в `PositionManager.on_signal`
+**Выход:** только через stop-loss / take-profit / trailing-stop / timeout (PositionManager). OFI-разворот как причина выхода — отключён.
 
 Два независимых кулдауна: `cooldown_seconds` (от последнего входа) + `post_close_cooldown_seconds` (от закрытия).
 Время UTC конвертируется в MSK (+3ч) для проверки `trading_hours`.
