@@ -653,7 +653,7 @@ class PositionManager:
             direction = "long" if qty_lots > 0 else "short"
             order_direction = "buy" if direction == "long" else "sell"
 
-            last_order = repository.get_last_unmatched_order(self.instrument_id, order_direction)
+            last_order = repository.get_last_unmatched_order(self.instrument_id, order_direction, self.strategy_name)
 
             if last_order is None:
                 logger.warning(

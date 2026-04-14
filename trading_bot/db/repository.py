@@ -201,10 +201,11 @@ def get_order_by_broker_id(broker_id: str) -> Optional[Order]:
         return session.query(Order).filter_by(order_id_broker=broker_id).first()
 
 
-def get_last_unmatched_order(instrument_id: int, direction: str) -> Optional[Order]:
+def get_last_unmatched_order(instrument_id: int, direction: str, strategy_name: Optional[str] = None) -> Optional[Order]:
     """
     Найти последний filled ордер для инструмента в заданном направлении,
     не упомянутый ни в одной сделке (ни как open_order_id, ни как close_order_id).
+    Если strategy_name задан — фильтрует по сигналу стратегии (через join с Signal).
     Используется при восстановлении позиции после рестарта.
     """
     with get_session() as session:
@@ -212,7 +213,7 @@ def get_last_unmatched_order(instrument_id: int, direction: str) -> Optional[Ord
             select(Trade.open_order_id).where(Trade.open_order_id.isnot(None)),
             select(Trade.close_order_id).where(Trade.close_order_id.isnot(None)),
         ).scalar_subquery()
-        return (
+        q = (
             session.query(Order)
             .filter(
                 Order.instrument_id == instrument_id,
@@ -220,9 +221,12 @@ def get_last_unmatched_order(instrument_id: int, direction: str) -> Optional[Ord
                 Order.status == "filled",
                 Order.id.not_in(matched),
             )
-            .order_by(Order.created_at.desc())
-            .first()
         )
+        if strategy_name is not None:
+            q = q.join(Signal, Order.signal_id == Signal.id).filter(
+                Signal.strategy_name == strategy_name
+            )
+        return q.order_by(Order.created_at.desc()).first()
 
 
 # ─── Trades ───────────────────────────────────────────────────────────────────
