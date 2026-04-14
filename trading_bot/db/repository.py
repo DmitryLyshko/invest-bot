@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from trading_bot.config import settings
 from trading_bot.db.models import (
     Base, BotLog, BotState, Instrument, MarketOrderbook, MarketTradeTick,
-    Order, Signal, Trade, User,
+    Order, Signal, StrategyState, Trade, User,
 )
 
 logger = logging.getLogger(__name__)
@@ -43,6 +43,7 @@ def init_db() -> None:
         if state is None:
             session.add(BotState(id=1, bot_active=False))
             session.commit()
+    init_strategy_states()
 
 
 @contextmanager
@@ -479,6 +480,44 @@ def set_bot_active(value: bool) -> None:
             state.bot_active = value
             state.updated_at = datetime.utcnow()
         session.commit()
+
+
+# ─── StrategyState ────────────────────────────────────────────────────────────
+
+KNOWN_STRATEGIES = ("combo", "rsi")
+
+
+def init_strategy_states() -> None:
+    """Создать записи для известных стратегий если их нет (вызывается при старте)."""
+    with get_session() as session:
+        for name in KNOWN_STRATEGIES:
+            if session.get(StrategyState, name) is None:
+                session.add(StrategyState(strategy_name=name, is_active=True))
+        session.commit()
+
+
+def get_strategy_active(strategy_name: str) -> bool:
+    """True если стратегия включена (неизвестные стратегии считаются активными)."""
+    with get_session() as session:
+        state = session.get(StrategyState, strategy_name)
+        return state.is_active if state is not None else True
+
+
+def set_strategy_active(strategy_name: str, value: bool) -> None:
+    with get_session() as session:
+        state = session.get(StrategyState, strategy_name)
+        if state is None:
+            state = StrategyState(strategy_name=strategy_name, is_active=value)
+            session.add(state)
+        else:
+            state.is_active = value
+            state.updated_at = datetime.utcnow()
+        session.commit()
+
+
+def get_all_strategy_states() -> List[StrategyState]:
+    with get_session() as session:
+        return session.query(StrategyState).order_by(StrategyState.strategy_name).all()
 
 
 # ─── Users ────────────────────────────────────────────────────────────────────

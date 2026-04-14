@@ -516,16 +516,26 @@ POST /instruments/add          → добавить тикер в yaml (дефо
 Чтение/запись `instruments.yaml` через `yaml.safe_load` / `yaml.dump`. Комментарии не сохраняются.
 При сохранении: yaml обновляется сразу, стратегия применит изменения только после перезапуска.
 
+### `routes/strategies.py`  blueprint=`strategies`
+```
+GET  /strategies                      → strategies.html  (карточки стратегий: статус, P&L, toggle)
+POST /api/strategies/<name>/toggle    → {active: bool}   (включить/выключить стратегию)
+```
+Выключение стратегии блокирует открытие новых позиций (entry-сигналы игнорируются в
+`PositionManager.on_signal`). Уже открытые позиции продолжают работать.
+Состояние хранится в таблице `strategy_state` (перманентно, переживает перезапуск).
+
 ### `templates/`
 ```
-base.html             — навигация (Дашборд / Сделки / Сигналы / Статистика / Инструменты), стили
+base.html             — навигация (Дашборд / Сделки / Сигналы / Статистика / Инструменты / Стратегии)
 login.html            — standalone (без base)
 dashboard.html        — KPI карточки, equity chart, 2 таблицы
-trades.html           — таблица с фильтрами + пагинация + CSV кнопка
+trades.html           — таблица с фильтрами (включая фильтр по стратегии) + пагинация + CSV
 signals.html          — таблица с пагинацией
-stats.html            — тикер-фильтр + 4+4 KPI карточки + 2 bar charts
+stats.html            — тикер-фильтр + стратегия-фильтр + breakdown-карточки по стратегиям + 4+4 KPI + 2 bar charts
 instruments.html      — таблица тикеров (конфиг + per-ticker P&L/сделки/win%) + форма добавления
 instrument_edit.html  — форма редактирования всех параметров тикера (5 секций)
+strategies.html       — карточки стратегий: описание, статус, P&L, кнопка включить/выключить
 error.html            — 404/500
 ```
 Chart.js подключается через CDN (`cdn.jsdelivr.net/npm/chart.js@4.4.0`).
@@ -536,23 +546,36 @@ Chart.js подключается через CDN (`cdn.jsdelivr.net/npm/chart.js
 
 ```python
 setup_logging()              # RotatingFileHandler(logs/bot.log) + stdout
-repository.init_db()         # CREATE TABLE + BotState singleton
+repository.init_db()         # CREATE TABLE IF NOT EXISTS + BotState + StrategyState singeltons
 init_clickhouse()            # подключить ClickHouse если CLICKHOUSE_HOST задан (no-op иначе)
 ensure_default_user(...)     # создать admin если нет
 config = load_instruments_config()      # читает instruments.yaml
 instruments = sync_instruments_to_db()  # upsert в таблицу instruments
+rsi_config = load_rsi_config()          # читает rsi_config.yaml
 account_id = get_first_account_id()     # SandboxClient или Client
 notifier = TelegramNotifier(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID)
 portfolio_manager = PortfolioManager(account_id, MAX_GLOBAL_POSITIONS, MAX_POSITION_PCT)
 portfolio_manager.refresh()             # загрузить баланс сразу при старте
+
+# ── Combo-стратегия (один стрим на тикер) ────────────────────────────────────
 for ticker, params in instruments.items():
     strategy, order_manager, position_manager = build_components(
-        ticker, params, account_id, portfolio_manager, notifier)
+        ticker, params, account_id, portfolio_manager, notifier)   # strategy_name='combo'
     recorder = DataRecorder(figi=params["figi"])
     on_orderbook, on_trade = make_event_handlers(strategy, position_manager, recorder)
     stream = StreamHandler(figi, on_orderbook, on_trade, instrument_id=params["instrument_id"])
     threading.Thread(target=stream.start, daemon=True, name=f"stream_{ticker}").start()
-    scheduler.add_job(position_manager.check_timeout, "interval", minutes=1)
+    scheduler.add_job(position_manager.check_timeout, "interval", minutes=1, id=f"timeout_check_{ticker}")
+
+# ── RSI-стратегия (отдельный стрим на тикер из rsi_config.yaml) ──────────────
+for ticker, rsi_params in rsi_config.items():
+    strategy, order_manager, position_manager = build_rsi_components(
+        ticker, instruments[ticker], rsi_params, account_id, portfolio_manager, notifier)  # strategy_name='rsi'
+    _, on_trade_rsi = make_event_handlers(strategy, position_manager, recorder_rsi)
+    rsi_stream = StreamHandler(figi, on_orderbook_rsi, on_trade_rsi, instrument_id=...)
+    threading.Thread(target=rsi_stream.start, daemon=True, name=f"rsi_stream_{ticker}").start()
+    scheduler.add_job(position_manager.check_timeout, "interval", minutes=1, id=f"rsi_timeout_{ticker}")
+
 scheduler.add_job(portfolio_manager.refresh, "interval", minutes=1, id="portfolio_refresh")
 scheduler.add_job(notifier.send_trading_day_started, "cron",
                   day_of_week="mon-fri", hour=7, minute=5, id="trading_day_start_notify")
@@ -563,6 +586,78 @@ web_thread.start()
 signal.signal(SIGINT/SIGTERM, shutdown)   # graceful stop: stop streams + flush CH
 stop_event.wait()
 ```
+
+---
+
+## RSI-стратегия (новая, 5-минутные свечи)
+
+### Новые файлы
+```
+trading_bot/core/strategy/candle_aggregator.py  — агрегатор 5-мин свечей из тиков
+trading_bot/core/strategy/rsi_strategy.py       — Augmented RSI стратегия
+trading_bot/config/rsi_config.yaml              — параметры RSI на тикер
+migrate_add_strategy_name.py                    — разовая миграция БД
+STRATEGY.md                                     — описание стратегий для пользователя
+```
+
+### `candle_aggregator.py`
+```python
+class Candle:
+    open_time, open, high, low, close, volume, trade_count
+    update(price, volume)
+
+class CandleAggregator:
+    __init__(interval_minutes: int, on_candle_closed: Callable[[Candle], None])
+    on_trade(price, volume, timestamp)   # при смене периода → вызывает on_candle_closed
+    reset()
+```
+Свечи формируются по UTC-времени. Ключ периода = `(час*60 + минута) // interval * interval`.
+
+### `rsi_strategy.py`
+```python
+class AugmentedRSI:
+    __init__(length, smooth, smo_type_rsi='RMA', smo_type_signal='EMA')
+    update(close) → (arsi, signal) | None
+
+class RSIStrategy(BaseStrategy):
+    on_orderbook(data)   → no-op
+    on_trade(data)       → кормит CandleAggregator
+    get_signal()         → Signal | None
+    set_position(direction, close_time)
+    current_ofi          → last_arsi (для совместимости с PositionManager)
+```
+**Алгоритм Augmented RSI:**
+`diff = r если upper растёт; -r если lower падает; d=close−prev иначе`
+`arsi = rma(diff)/rma(|diff|) * 50 + 50`  диапазон [0, 100]
+`signal = ema(arsi, smooth)`
+
+**Входы:** arsi пересекает os_value снизу → LONG; ob_value сверху → SHORT.
+**Выходы:** arsi пересекает signal line в обратном направлении (+ стоп/тейк от PositionManager).
+
+### `rsi_config.yaml`
+Структура: один тикер = одна секция. Тикеры должны совпадать с `instruments.yaml`.
+Параметры: `length`, `smooth`, `smo_type_rsi`, `smo_type_signal`, `ob_value`, `os_value`,
+`stop_ticks`, `breakeven_ticks`, `take_profit_ticks`, `trailing_stop_ticks`,
+`max_position_lots`, `max_hold_minutes`, `cooldown_seconds`, `post_close_cooldown_seconds`,
+`trading_hours`, `skip_first_minutes`, `min_hold_seconds`, `min_profit_ticks_for_ofi_exit`.
+figi / instrument_id / lot_size / tick_size / commission_rate берутся из `instruments.yaml`.
+
+### Новые поля БД
+```
+signals.strategy_name  VARCHAR(50) DEFAULT 'combo'  — 'combo' или 'rsi'
+trades.strategy_name   VARCHAR(50) DEFAULT 'combo'  — 'combo' или 'rsi'
+```
+Новая таблица:
+```
+strategy_state: strategy_name (PK), is_active (bool), updated_at
+```
+Записи инициализируются в `init_db()` → `init_strategy_states()`.
+
+### strategy_name в PositionManager
+`PositionManager.__init__` принимает `strategy_name: str = 'combo'`.
+`on_signal` проверяет `repository.get_strategy_active(strategy_name)` перед открытием.
+Все `save_signal` и `save_trade` вызываются через `_save_signal` / `_save_trade` хелперы,
+которые автоматически прокидывают `strategy_name`.
 
 ---
 
@@ -578,6 +673,9 @@ stop_event.wait()
 | Идемпотентность ордеров | `uuid4()` как `client_order_id` | `orders` запись создаётся ДО вызова API |
 | Только одна позиция | контролируется `RiskManager._check_no_pyramiding` | |
 | bot_active флаг | `bot_state.bot_active` в БД | переключается через `POST /api/bot/toggle` |
+| strategy_name тег | `signals.strategy_name`, `trades.strategy_name` | `'combo'` или `'rsi'`; NULL у старых записей → трактуется как `'combo'` |
+| Включение стратегий | `strategy_state.is_active` в БД | `POST /api/strategies/<name>/toggle`; блокирует только новые входы |
+| RSI и Combo — разные потоки | по одному `stream_thread` на каждую стратегию/тикер | потоки изолированы, один `PositionManager` на поток |
 | Дневной лимит убытков | `DAILY_LOSS_LIMIT_PCT=0.01` (1% от счёта) | fallback `DAILY_LOSS_LIMIT_RUB=-500` если портфель не загружен |
 | Безубыток | `breakeven_ticks` в конфиге | флаг `stop_at_breakeven` в `OpenPosition`; игнорируется если `trailing_stop_ticks > 0` |
 | Тейк-профит | `take_profit_ticks` в конфиге | 0 = отключён |

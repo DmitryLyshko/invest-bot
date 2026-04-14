@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}Стратегии — Trading Bot{% endblock %}
+
+{% block content %}
+<h1 class="page-title">Управление стратегиями</h1>
+
+<div style="background: #1e2410; border: 1px solid #4a5a20; border-radius: 6px; padding: 0.65rem 1rem; margin-bottom: 1.5rem; font-size: 0.82rem; color: #b8cc6e;">
+    Выключение стратегии блокирует открытие <strong>новых</strong> позиций.
+    Уже открытые позиции продолжают работать (стоп-лосс, тейк-профит, тайм-аут действуют).
+</div>
+
+<div class="grid grid-2" style="gap: 1.25rem;">
+{% for name, meta in strategy_meta.items() %}
+{% set state = states.get(name) %}
+{% set is_active = state.is_active if state else true %}
+{% set pnl_row = strategy_pnl.get(name) %}
+<div class="card" style="border-color: {{ '#2d4a6a' if name == 'rsi' else '#2d4a3a' }};">
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem;">
+        <div>
+            <div style="font-size: 1rem; font-weight: 700; color: #fff; margin-bottom: 0.25rem;">
+                {{ meta.display_name }}
+            </div>
+            <div style="font-size: 0.75rem; color: #718096;">Таймфрейм: {{ meta.timeframe }}</div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 0.75rem;">
+            <span class="badge {{ 'badge-yes' if is_active else 'badge-no' }}" id="badge-{{ name }}">
+                {{ 'Активна' if is_active else 'Выключена' }}
+            </span>
+            <button
+                class="btn btn-sm toggle-btn"
+                id="btn-{{ name }}"
+                data-name="{{ name }}"
+                data-active="{{ 'true' if is_active else 'false' }}"
+                style="background: {{ '#2d4a3a' if is_active else '#3a2020' }}; color: {{ '#68d391' if is_active else '#fc8181' }}; min-width: 110px;"
+                onclick="toggleStrategy('{{ name }}')"
+            >{{ 'Выключить' if is_active else 'Включить' }}</button>
+        </div>
+    </div>
+
+    <p style="font-size: 0.83rem; color: #a0aec0; margin-bottom: 0.75rem;">{{ meta.description }}</p>
+    <p style="font-size: 0.78rem; color: #718096; margin-bottom: 1rem;">{{ meta.doc }}</p>
+
+    {% if pnl_row %}
+    <div style="display: flex; gap: 1.5rem; padding-top: 0.75rem; border-top: 1px solid #2d3748;">
+        <div>
+            <div class="card-title" style="font-size: 0.7rem;">P&L всего</div>
+            <div style="font-weight: 700; font-size: 1rem;" class="{{ 'positive' if pnl_row.total_pnl >= 0 else 'negative' }}">
+                {{ '{:+.2f}'.format(pnl_row.total_pnl) }} ₽
+            </div>
+        </div>
+        <div>
+            <div class="card-title" style="font-size: 0.7rem;">Сделок</div>
+            <div style="font-weight: 700; font-size: 1rem; color: #fff;">{{ pnl_row.total_trades }}</div>
+        </div>
+        <div>
+            <div class="card-title" style="font-size: 0.7rem;">Win Rate</div>
+            <div style="font-weight: 700; font-size: 1rem;" class="{{ 'positive' if pnl_row.win_rate >= 50 else '' }}">{{ pnl_row.win_rate }}%</div>
+        </div>
+        <div style="margin-left: auto; align-self: flex-end;">
+            <a href="{{ url_for('stats.index', strategy=name) }}" style="font-size: 0.8rem; color: #63b3ed;">Подробная статистика →</a>
+        </div>
+    </div>
+    {% else %}
+    <div style="padding-top: 0.75rem; border-top: 1px solid #2d3748; font-size: 0.8rem; color: #4a5568;">
+        Сделок ещё нет
+    </div>
+    {% endif %}
+</div>
+{% endfor %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleStrategy(name) {
+    const btn = document.getElementById('btn-' + name);
+    const badge = document.getElementById('badge-' + name);
+    btn.disabled = true;
+    btn.textContent = '...';
+
+    fetch('/api/strategies/' + name + '/toggle', { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            const active = data.active;
+            btn.dataset.active = active;
+            btn.disabled = false;
+
+            if (active) {
+                btn.textContent = 'Выключить';
+                btn.style.background = '#2d4a3a';
+                btn.style.color = '#68d391';
+                badge.textContent = 'Активна';
+                badge.className = 'badge badge-yes';
+            } else {
+                btn.textContent = 'Включить';
+                btn.style.background = '#3a2020';
+                btn.style.color = '#fc8181';
+                badge.textContent = 'Выключена';
+                badge.className = 'badge badge-no';
+            }
+        })
+        .catch(() => { btn.disabled = false; btn.textContent = 'Ошибка'; });
+}
+</script>
+{% endblock %}

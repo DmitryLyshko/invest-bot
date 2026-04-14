@@ -191,6 +191,15 @@ class BotState(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class StrategyState(Base):
+    """Состояние включения/выключения каждой стратегии."""
+    __tablename__ = "strategy_state"
+
+    strategy_name = Column(String(50), primary_key=True)
+    is_active = Column(Boolean, default=True, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class MarketOrderbook(Base):
     """Снапшоты стакана для бэктеста. Запись включается через RECORD_MARKET_DATA=true."""
     __tablename__ = "market_orderbooks"

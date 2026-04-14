@@ -125,6 +125,15 @@ class PositionManager:
 
         Это главная точка входа: здесь принимается решение о реальном ордере.
         """
+        # Не открывать новые позиции если стратегия выключена.
+        # Уже открытые позиции продолжают работать (стоп/тейк/тайм-аут).
+        if signal.signal_type in (SignalType.LONG, SignalType.SHORT):
+            if not repository.get_strategy_active(self.strategy_name):
+                logger.debug(
+                    f"Стратегия '{self.strategy_name}' отключена — сигнал входа проигнорирован"
+                )
+                return
+
         logger.info(f"Получен сигнал: {signal}")
 
         try:
