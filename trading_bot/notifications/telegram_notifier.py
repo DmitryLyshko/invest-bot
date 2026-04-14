@@ -8,7 +8,9 @@ Telegram-уведомления для торгового бота.
 Если переменные не заданы — все вызовы no-op.
 """
 import logging
+import queue
 import threading
+import time
 from datetime import datetime, timedelta
 
 import requests
@@ -28,8 +30,11 @@ class TelegramNotifier:
         self._token = token
         self._chat_id = chat_id
         self._enabled = bool(token and chat_id)
+        self._queue: queue.Queue[str] = queue.Queue()
         if self._enabled:
             logger.info("Telegram уведомления включены (chat_id=%s)", chat_id)
+            worker = threading.Thread(target=self._worker, daemon=True)
+            worker.start()
         else:
             logger.info("Telegram уведомления отключены (TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID не заданы)")
 
@@ -107,24 +112,38 @@ class TelegramNotifier:
     # ── Внутренние методы ───────────────────────────────────────────────────────
 
     def _send(self, text: str) -> None:
-        """Отправить сообщение в фоновом потоке."""
+        """Поставить сообщение в очередь отправки."""
         if not self._enabled:
             return
-        threading.Thread(target=self._send_sync, args=(text,), daemon=True).start()
+        self._queue.put(text)
 
-    def _send_sync(self, text: str) -> None:
-        """Синхронная отправка через Bot API."""
-        try:
-            url = f"https://api.telegram.org/bot{self._token}/sendMessage"
-            resp = requests.post(
-                url,
-                json={"chat_id": self._chat_id, "text": text, "parse_mode": "HTML"},
-                timeout=10,
-            )
-            if not resp.ok:
-                logger.warning("Telegram: ошибка отправки %s — %s", resp.status_code, resp.text[:200])
-        except Exception as exc:
-            logger.warning("Telegram: исключение при отправке: %s", exc)
+    def _worker(self) -> None:
+        """Фоновый поток: читает очередь и отправляет с 3 попытками."""
+        url = f"https://api.telegram.org/bot{self._token}/sendMessage"
+        while True:
+            text = self._queue.get()
+            for attempt in range(3):
+                try:
+                    resp = requests.post(
+                        url,
+                        json={"chat_id": self._chat_id, "text": text, "parse_mode": "HTML"},
+                        timeout=10,
+                    )
+                    if resp.ok:
+                        break
+                    # 429 Too Many Requests — ждём retry_after
+                    if resp.status_code == 429:
+                        retry_after = resp.json().get("parameters", {}).get("retry_after", 5)
+                        logger.warning("Telegram: rate limit, ждём %s сек", retry_after)
+                        time.sleep(retry_after)
+                    else:
+                        logger.warning("Telegram: ошибка отправки %s — %s", resp.status_code, resp.text[:200])
+                        break
+                except Exception as exc:
+                    logger.warning("Telegram: попытка %d/3 провалилась: %s", attempt + 1, exc)
+                    if attempt < 2:
+                        time.sleep(2 ** attempt)
+            self._queue.task_done()
 
 
 # ── Вспомогательные функции ─────────────────────────────────────────────────
