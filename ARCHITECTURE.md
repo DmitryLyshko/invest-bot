@@ -135,7 +135,7 @@ SBER:
   ofi_auto_calibrate_window: 0       # > 0: первые N снапшотов → p90(|raw_ofi|) заменяет ofi_scale; 0 = откл
   trend_ma_window: 1000              # окно MA mid-цен для фильтра тренда (0 = выкл)
   min_ofi_entry_confirmations: 3     # N подряд OFI-чтений выше порога до генерации сигнала входа
-  max_position_lots: 1
+  max_position_lots: 500             # жёсткий потолок лотов; не должен мешать расчёту 30% — compute_lots считает долю портфеля динамически
 
   # Стопы и тейк
   tick_size: 0.01
@@ -286,7 +286,7 @@ class PositionManager:
 **Тейк-профит:** если `take_profit_ticks > 0` и движение в плюс достигло порога — закрытие с `exit_reason="take_profit"`.
 **Глобальный лимит позиций:** в `on_signal` перед открытием проверяется `portfolio_manager.can_open()`. При достижении лимита сигнал блокируется с WARNING.
 **Размер лота:** при открытии вычисляется через `portfolio_manager.compute_lots(_last_price, lot_size, max_position_lots)`.
-**Уведомления:** `TelegramNotifier.send_position_opened()` после открытия, `send_position_closed()` после закрытия.
+**Уведомления:** `TelegramNotifier.send_position_opened()` после открытия. `send_position_closed()` вызывается **до** `repository.save_trade()` — чтобы ошибка БД не заблокировала получение результата сделки в Telegram.
 
 ---
 

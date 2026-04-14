@@ -16,7 +16,7 @@ SBER:
   tick_size: 0.01
   stop_ticks: 86
   breakeven_ticks: 73
-  max_position_lots: 1
+  max_position_lots: 500
   take_profit_ticks: 258
   trading_hours:
     start: '10:05'
@@ -48,7 +48,7 @@ GMKN:
   tick_size: 0.02
   stop_ticks: 59
   breakeven_ticks: 50
-  max_position_lots: 1
+  max_position_lots: 500
   take_profit_ticks: 177
   trading_hours:
     start: '10:05'
@@ -80,7 +80,7 @@ VTBR:
   tick_size: 0.005
   stop_ticks: 122
   breakeven_ticks: 104
-  max_position_lots: 1
+  max_position_lots: 500
   take_profit_ticks: 366
   trading_hours:
     start: '10:05'
@@ -112,7 +112,7 @@ LKOH:
   tick_size: 0.5
   stop_ticks: 85
   breakeven_ticks: 72
-  max_position_lots: 1
+  max_position_lots: 500
   take_profit_ticks: 255
   trading_hours:
     start: '10:05'
@@ -144,7 +144,7 @@ GAZP:
   tick_size: 0.01
   stop_ticks: 95
   breakeven_ticks: 81
-  max_position_lots: 1
+  max_position_lots: 500
   take_profit_ticks: 285
   trading_hours:
     start: '10:05'
@@ -176,7 +176,7 @@ NVTK:
   tick_size: 0.1
   stop_ticks: 60
   breakeven_ticks: 51
-  max_position_lots: 1
+  max_position_lots: 500
   take_profit_ticks: 180
   trading_hours:
     start: '10:05'
@@ -208,7 +208,7 @@ ROSN:
   tick_size: 0.05
   stop_ticks: 80
   breakeven_ticks: 68
-  max_position_lots: 1
+  max_position_lots: 500
   take_profit_ticks: 240
   trading_hours:
     start: '10:05'
@@ -240,7 +240,7 @@ TATN:
   tick_size: 0.1
   stop_ticks: 60
   breakeven_ticks: 51
-  max_position_lots: 1
+  max_position_lots: 500
   take_profit_ticks: 180
   trading_hours:
     start: '10:05'
@@ -272,7 +272,7 @@ YNDX:
   tick_size: 0.2
   stop_ticks: 60
   breakeven_ticks: 51
-  max_position_lots: 1
+  max_position_lots: 500
   take_profit_ticks: 180
   trading_hours:
     start: '10:05'
@@ -304,7 +304,7 @@ PLZL:
   tick_size: 0.2
   stop_ticks: 80
   breakeven_ticks: 68
-  max_position_lots: 1
+  max_position_lots: 500
   take_profit_ticks: 240
   trading_hours:
     start: '10:05'
@@ -336,7 +336,7 @@ CHMF:
   tick_size: 0.2
   stop_ticks: 65
   breakeven_ticks: 55
-  max_position_lots: 1
+  max_position_lots: 500
   take_profit_ticks: 195
   trading_hours:
     start: '10:05'
@@ -368,7 +368,7 @@ NLMK:
   tick_size: 0.02
   stop_ticks: 90
   breakeven_ticks: 77
-  max_position_lots: 1
+  max_position_lots: 500
   take_profit_ticks: 270
   trading_hours:
     start: '10:05'
@@ -400,7 +400,7 @@ MAGN:
   tick_size: 0.005
   stop_ticks: 100
   breakeven_ticks: 85
-  max_position_lots: 1
+  max_position_lots: 500
   take_profit_ticks: 300
   trading_hours:
     start: '10:05'
@@ -432,7 +432,7 @@ ALRS:
   tick_size: 0.01
   stop_ticks: 90
   breakeven_ticks: 77
-  max_position_lots: 1
+  max_position_lots: 500
   take_profit_ticks: 270
   trading_hours:
     start: '10:05'
@@ -464,7 +464,7 @@ MTSS:
   tick_size: 0.05
   stop_ticks: 80
   breakeven_ticks: 68
-  max_position_lots: 1
+  max_position_lots: 500
   take_profit_ticks: 240
   trading_hours:
     start: '10:05'
@@ -496,7 +496,7 @@ SIBN:
   tick_size: 0.05
   stop_ticks: 80
   breakeven_ticks: 68
-  max_position_lots: 1
+  max_position_lots: 500
   take_profit_ticks: 240
   trading_hours:
     start: '10:05'
@@ -528,7 +528,7 @@ AFLT:
   tick_size: 0.01
   stop_ticks: 80
   breakeven_ticks: 68
-  max_position_lots: 1
+  max_position_lots: 500
   take_profit_ticks: 240
   trading_hours:
     start: '10:05'
@@ -560,7 +560,7 @@ MGNT:
   tick_size: 1.0
   stop_ticks: 50
   breakeven_ticks: 43
-  max_position_lots: 1
+  max_position_lots: 500
   take_profit_ticks: 150
   trading_hours:
     start: '10:05'
@@ -592,7 +592,7 @@ MOEX:
   tick_size: 0.1
   stop_ticks: 65
   breakeven_ticks: 55
-  max_position_lots: 1
+  max_position_lots: 500
   take_profit_ticks: 195
   trading_hours:
     start: '10:05'
@@ -624,7 +624,7 @@ PHOR:
   tick_size: 0.5
   stop_ticks: 70
   breakeven_ticks: 60
-  max_position_lots: 1
+  max_position_lots: 500
   take_profit_ticks: 210
   trading_hours:
     start: '10:05'

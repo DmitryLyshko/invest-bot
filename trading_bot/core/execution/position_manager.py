@@ -316,6 +316,34 @@ class PositionManager:
 
         pnl_after_commission = pnl - commission
 
+        repository.log_event(
+            "INFO",
+            "position_manager",
+            f"Закрыта {pos.direction.upper()} позиция: "
+            f"{pos.quantity_lots} лотов @ {close_price:.2f}, "
+            f"P&L={pnl_after_commission:.2f} руб., причина={exit_reason}",
+        )
+        logger.info(
+            f"Позиция закрыта: {pos.direction.upper()} @ {close_price:.2f}, "
+            f"P&L={pnl_after_commission:.2f} руб."
+        )
+
+        # Уведомление отправляем ДО записи в БД — чтобы ошибка сохранения
+        # не заблокировала получение информации о результате сделки.
+        if self.notifier:
+            hold_secs = int((close_at - pos.open_at).total_seconds())
+            self.notifier.send_position_closed(
+                ticker=self.ticker,
+                direction=pos.direction,
+                entry_price=pos.entry_price,
+                close_price=close_price,
+                quantity_lots=pos.quantity_lots,
+                lot_size=self.params.get("lot_size", 1),
+                pnl=pnl_after_commission,
+                hold_seconds=hold_secs,
+                exit_reason=exit_reason,
+            )
+
         # Записываем завершённую сделку в БД
         repository.save_trade(
             instrument_id=self.instrument_id,
@@ -331,32 +359,6 @@ class PositionManager:
             open_order_id=pos.open_order_id,
             close_order_id=order.id,
         )
-
-        repository.log_event(
-            "INFO",
-            "position_manager",
-            f"Закрыта {pos.direction.upper()} позиция: "
-            f"{pos.quantity_lots} лотов @ {close_price:.2f}, "
-            f"P&L={pnl_after_commission:.2f} руб., причина={exit_reason}",
-        )
-        logger.info(
-            f"Позиция закрыта: {pos.direction.upper()} @ {close_price:.2f}, "
-            f"P&L={pnl_after_commission:.2f} руб."
-        )
-
-        if self.notifier:
-            hold_secs = int((close_at - pos.open_at).total_seconds())
-            self.notifier.send_position_closed(
-                ticker=self.ticker,
-                direction=pos.direction,
-                entry_price=pos.entry_price,
-                close_price=close_price,
-                quantity_lots=pos.quantity_lots,
-                lot_size=self.params.get("lot_size", 1),
-                pnl=pnl_after_commission,
-                hold_seconds=hold_secs,
-                exit_reason=exit_reason,
-            )
 
         # Сбрасываем позицию
         self._position = None
