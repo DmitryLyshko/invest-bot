@@ -189,5 +189,6 @@ def _format_reason(reason: str) -> str:
         "take_profit": "тейк-профит",
         "trailing_stop": "трейлинг-стоп",
         "manual": "ручное закрытие",
+        "eod_close": "закрытие конца дня (23:30)",
     }
     return mapping.get(reason, reason)

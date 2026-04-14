@@ -676,6 +676,9 @@ strategy_state: strategy_name (PK), is_active (bool), updated_at
 | strategy_name тег | `signals.strategy_name`, `trades.strategy_name` | `'combo'` или `'rsi'`; NULL у старых записей → трактуется как `'combo'` |
 | Включение стратегий | `strategy_state.is_active` в БД | `POST /api/strategies/<name>/toggle`; блокирует только новые входы |
 | RSI и Combo — разные потоки | по одному `stream_thread` на каждую стратегию/тикер | потоки изолированы, один `PositionManager` на поток |
+| RSI — торговые часы | `trading_hours: start: '10:05', end: '22:00'` | новые входы разрешены 10:05-22:00 МСК (дневная + вечерняя сессия MOEX); вне окна `RiskManager` отказывает |
+| RSI — принудительное EOD-закрытие | `eod_close_time: '23:30'` в `rsi_config.yaml` | `check_eod_close()` вызывается планировщиком каждую минуту; если есть открытая позиция и МСК ≥ 23:30 — принудительно закрывает с `exit_reason='eod_close'`. Обходит RiskManager (напрямую через `_close_position`) |
+| RSI — `SignalReason.EOD_CLOSE` | `base_strategy.py` | значение `'eod_close'`; используется только RSI для EOD-закрытия |
 | Дневной лимит убытков | `DAILY_LOSS_LIMIT_PCT=0.01` (1% от счёта) | fallback `DAILY_LOSS_LIMIT_RUB=-500` если портфель не загружен |
 | Безубыток | `breakeven_ticks` в конфиге | флаг `stop_at_breakeven` в `OpenPosition`; игнорируется если `trailing_stop_ticks > 0` |
 | Тейк-профит | `take_profit_ticks` в конфиге | 0 = отключён |

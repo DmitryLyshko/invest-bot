@@ -444,6 +444,37 @@ class PositionManager:
             )
             self._close_position(timeout_signal, db_signal.id, exit_reason="timeout")
 
+    def check_eod_close(self) -> None:
+        """
+        Принудительно закрыть позицию по достижении eod_close_time (МСК).
+        Вызывается по расписанию раз в минуту для RSI-стратегии.
+        Параметр eod_close_time задаётся в rsi_config.yaml, например '23:30'.
+        """
+        eod_str = self.params.get("eod_close_time")
+        if not eod_str or self._position is None:
+            return
+
+        from datetime import time as dt_time
+        now_msk = datetime.utcnow() + timedelta(hours=3)
+        hh, mm = map(int, eod_str.split(":"))
+        if now_msk.time() >= dt_time(hh, mm):
+            logger.info(
+                f"[{self.ticker}/{self.strategy_name}] EOD-закрытие: "
+                f"текущее время МСК {now_msk.strftime('%H:%M')} >= {eod_str}"
+            )
+            from trading_bot.core.strategy.base_strategy import Signal, SignalType, SignalReason
+            db_signal = self._save_signal(
+                signal_type="exit",
+                ofi_value=self._get_current_ofi(),
+                reason="eod_close",
+                acted_on=True,
+            )
+            self._close_position(
+                Signal(signal_type=SignalType.EXIT, reason=SignalReason.EOD_CLOSE),
+                db_signal.id,
+                exit_reason="eod_close",
+            )
+
     def _check_stop_loss(self, current_price: float) -> None:
         """
         Проверить стоп-лосс и тейк-профит в тиках.

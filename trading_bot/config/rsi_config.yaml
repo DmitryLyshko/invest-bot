@@ -19,7 +19,8 @@ SBER:
   post_close_cooldown_seconds: 900
   trading_hours:
     start: '10:05'
-    end: '18:30'
+    end: '22:00'
+  eod_close_time: '23:30'
   skip_first_minutes: 5
   min_hold_seconds: 300
   min_profit_ticks_for_ofi_exit: 0
@@ -41,7 +42,8 @@ GMKN:
   post_close_cooldown_seconds: 900
   trading_hours:
     start: '10:05'
-    end: '18:30'
+    end: '22:00'
+  eod_close_time: '23:30'
   skip_first_minutes: 5
   min_hold_seconds: 300
   min_profit_ticks_for_ofi_exit: 0
@@ -63,7 +65,8 @@ VTBR:
   post_close_cooldown_seconds: 900
   trading_hours:
     start: '10:05'
-    end: '18:30'
+    end: '22:00'
+  eod_close_time: '23:30'
   skip_first_minutes: 5
   min_hold_seconds: 300
   min_profit_ticks_for_ofi_exit: 0
@@ -85,7 +88,8 @@ LKOH:
   post_close_cooldown_seconds: 900
   trading_hours:
     start: '10:05'
-    end: '18:30'
+    end: '22:00'
+  eod_close_time: '23:30'
   skip_first_minutes: 5
   min_hold_seconds: 300
   min_profit_ticks_for_ofi_exit: 0
@@ -107,7 +111,8 @@ GAZP:
   post_close_cooldown_seconds: 900
   trading_hours:
     start: '10:05'
-    end: '18:30'
+    end: '22:00'
+  eod_close_time: '23:30'
   skip_first_minutes: 5
   min_hold_seconds: 300
   min_profit_ticks_for_ofi_exit: 0
@@ -129,7 +134,8 @@ NVTK:
   post_close_cooldown_seconds: 900
   trading_hours:
     start: '10:05'
-    end: '18:30'
+    end: '22:00'
+  eod_close_time: '23:30'
   skip_first_minutes: 5
   min_hold_seconds: 300
   min_profit_ticks_for_ofi_exit: 0
@@ -151,7 +157,8 @@ ROSN:
   post_close_cooldown_seconds: 900
   trading_hours:
     start: '10:05'
-    end: '18:30'
+    end: '22:00'
+  eod_close_time: '23:30'
   skip_first_minutes: 5
   min_hold_seconds: 300
   min_profit_ticks_for_ofi_exit: 0
@@ -173,7 +180,8 @@ TATN:
   post_close_cooldown_seconds: 900
   trading_hours:
     start: '10:05'
-    end: '18:30'
+    end: '22:00'
+  eod_close_time: '23:30'
   skip_first_minutes: 5
   min_hold_seconds: 300
   min_profit_ticks_for_ofi_exit: 0
@@ -195,7 +203,8 @@ YNDX:
   post_close_cooldown_seconds: 900
   trading_hours:
     start: '10:05'
-    end: '18:30'
+    end: '22:00'
+  eod_close_time: '23:30'
   skip_first_minutes: 5
   min_hold_seconds: 300
   min_profit_ticks_for_ofi_exit: 0
@@ -217,7 +226,8 @@ PLZL:
   post_close_cooldown_seconds: 900
   trading_hours:
     start: '10:05'
-    end: '18:30'
+    end: '22:00'
+  eod_close_time: '23:30'
   skip_first_minutes: 5
   min_hold_seconds: 300
   min_profit_ticks_for_ofi_exit: 0
@@ -239,7 +249,8 @@ CHMF:
   post_close_cooldown_seconds: 900
   trading_hours:
     start: '10:05'
-    end: '18:30'
+    end: '22:00'
+  eod_close_time: '23:30'
   skip_first_minutes: 5
   min_hold_seconds: 300
   min_profit_ticks_for_ofi_exit: 0
@@ -261,7 +272,8 @@ NLMK:
   post_close_cooldown_seconds: 900
   trading_hours:
     start: '10:05'
-    end: '18:30'
+    end: '22:00'
+  eod_close_time: '23:30'
   skip_first_minutes: 5
   min_hold_seconds: 300
   min_profit_ticks_for_ofi_exit: 0
@@ -283,7 +295,8 @@ MAGN:
   post_close_cooldown_seconds: 900
   trading_hours:
     start: '10:05'
-    end: '18:30'
+    end: '22:00'
+  eod_close_time: '23:30'
   skip_first_minutes: 5
   min_hold_seconds: 300
   min_profit_ticks_for_ofi_exit: 0
@@ -305,7 +318,8 @@ ALRS:
   post_close_cooldown_seconds: 900
   trading_hours:
     start: '10:05'
-    end: '18:30'
+    end: '22:00'
+  eod_close_time: '23:30'
   skip_first_minutes: 5
   min_hold_seconds: 300
   min_profit_ticks_for_ofi_exit: 0
@@ -327,7 +341,8 @@ MTSS:
   post_close_cooldown_seconds: 900
   trading_hours:
     start: '10:05'
-    end: '18:30'
+    end: '22:00'
+  eod_close_time: '23:30'
   skip_first_minutes: 5
   min_hold_seconds: 300
   min_profit_ticks_for_ofi_exit: 0
@@ -349,7 +364,8 @@ SIBN:
   post_close_cooldown_seconds: 900
   trading_hours:
     start: '10:05'
-    end: '18:30'
+    end: '22:00'
+  eod_close_time: '23:30'
   skip_first_minutes: 5
   min_hold_seconds: 300
   min_profit_ticks_for_ofi_exit: 0
@@ -371,7 +387,8 @@ AFLT:
   post_close_cooldown_seconds: 900
   trading_hours:
     start: '10:05'
-    end: '18:30'
+    end: '22:00'
+  eod_close_time: '23:30'
   skip_first_minutes: 5
   min_hold_seconds: 300
   min_profit_ticks_for_ofi_exit: 0
@@ -393,7 +410,8 @@ MGNT:
   post_close_cooldown_seconds: 900
   trading_hours:
     start: '10:05'
-    end: '18:30'
+    end: '22:00'
+  eod_close_time: '23:30'
   skip_first_minutes: 5
   min_hold_seconds: 300
   min_profit_ticks_for_ofi_exit: 0
@@ -415,7 +433,8 @@ MOEX:
   post_close_cooldown_seconds: 900
   trading_hours:
     start: '10:05'
-    end: '18:30'
+    end: '22:00'
+  eod_close_time: '23:30'
   skip_first_minutes: 5
   min_hold_seconds: 300
   min_profit_ticks_for_ofi_exit: 0
@@ -437,7 +456,8 @@ PHOR:
   post_close_cooldown_seconds: 900
   trading_hours:
     start: '10:05'
-    end: '18:30'
+    end: '22:00'
+  eod_close_time: '23:30'
   skip_first_minutes: 5
   min_hold_seconds: 300
   min_profit_ticks_for_ofi_exit: 0

@@ -24,6 +24,7 @@ class SignalReason(str, Enum):
     TAKE_PROFIT = "take_profit"
     TRAILING_STOP = "trailing_stop"
     MANUAL = "manual"
+    EOD_CLOSE = "eod_close"
 
 
 @dataclass

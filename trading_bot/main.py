@@ -359,6 +359,12 @@ def main() -> None:
             minutes=1,
             id=f"rsi_timeout_check_{ticker}",
         )
+        scheduler.add_job(
+            rsi_position_manager.check_eod_close,
+            "interval",
+            minutes=1,
+            id=f"rsi_eod_close_{ticker}",
+        )
 
         rsi_position_manager.recover_position(params["figi"])
         position_managers[rsi_key] = rsi_position_manager
