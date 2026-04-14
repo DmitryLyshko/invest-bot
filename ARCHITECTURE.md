@@ -456,8 +456,9 @@ class TelegramNotifier:
     send_position_closed(ticker, direction, entry_price, close_price,
                          quantity_lots, lot_size, pnl, hold_seconds, exit_reason)
 ```
-Все `send_*` неблокирующие — отправка в фоновом daemon-потоке.
-Если `TELEGRAM_BOT_TOKEN` или `TELEGRAM_CHAT_ID` не заданы — все методы no-op.
+Все `send_*` неблокирующие — кладут текст в `queue.Queue`, которую читает один фоновый daemon-поток (`_worker`).
+До 3 попыток на каждое сообщение: при 429 (rate limit) ждёт `retry_after` из ответа API; при сетевой ошибке — экспоненциальная задержка (1с, 2с).
+Если `TELEGRAM_BOT_TOKEN` или `TELEGRAM_CHAT_ID` не заданы — worker не запускается, все методы no-op.
 
 ---
 
