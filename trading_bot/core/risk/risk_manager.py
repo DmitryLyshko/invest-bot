@@ -8,10 +8,13 @@
 """
 import logging
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from trading_bot.config import settings
 from trading_bot.db import repository
+
+if TYPE_CHECKING:
+    from trading_bot.core.execution.portfolio_manager import PortfolioManager
 
 logger = logging.getLogger(__name__)
 
@@ -29,10 +32,15 @@ class RiskManager:
     Каждый отказ логируется в БД.
     """
 
-    def __init__(self, instrument_id: int, instrument_config: dict) -> None:
+    def __init__(
+        self,
+        instrument_id: int,
+        instrument_config: dict,
+        portfolio_manager: Optional["PortfolioManager"] = None,
+    ) -> None:
         self.instrument_id = instrument_id
         self.params = instrument_config
-        self._daily_loss_limit = settings.DAILY_LOSS_LIMIT_RUB
+        self._portfolio_manager = portfolio_manager
 
     def check_all(
         self,
@@ -122,16 +130,35 @@ class RiskManager:
         """
         Проверить дневной лимит убытков.
 
-        Если суммарный P&L за сегодня достиг или превысил лимит —
-        прекращаем торговлю до следующего дня. Защита от серии убытков.
-        """
-        today_pnl = repository.get_today_pnl(self.instrument_id)
+        Лимит = 1% от стоимости портфеля (DAILY_LOSS_LIMIT_PCT).
+        Если стоимость портфеля ещё не загружена — fallback на DAILY_LOSS_LIMIT_RUB.
 
-        if today_pnl <= self._daily_loss_limit:
+        Проверяется ГЛОБАЛЬНЫЙ P&L за сегодня по всем инструментам —
+        не per-instrument. С 15 тикерами per-instrument проверка дала бы
+        суммарный лимит в 15× от заданного значения.
+        """
+        today_pnl = repository.get_today_pnl(instrument_id=None)
+
+        portfolio_value = (
+            self._portfolio_manager.portfolio_value
+            if self._portfolio_manager is not None
+            else 0.0
+        )
+        if portfolio_value > 0:
+            limit = -(portfolio_value * settings.DAILY_LOSS_LIMIT_PCT)
+            limit_str = (
+                f"{abs(limit):.2f} руб. "
+                f"({settings.DAILY_LOSS_LIMIT_PCT * 100:.1f}% от {portfolio_value:.0f} руб.)"
+            )
+        else:
+            limit = settings.DAILY_LOSS_LIMIT_RUB
+            limit_str = f"{abs(limit):.2f} руб. (фиксированный лимит)"
+
+        if today_pnl <= limit:
             self._deny(
                 "daily_loss_limit",
                 f"Дневной лимит убытков достигнут: {today_pnl:.2f} руб. "
-                f"(лимит: {self._daily_loss_limit:.2f} руб.)",
+                f"(лимит: {limit_str})",
             )
 
     def _deny(self, reason: str, message: str) -> None:

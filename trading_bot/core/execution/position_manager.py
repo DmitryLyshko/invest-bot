@@ -21,6 +21,7 @@ from trading_bot.core.risk.risk_manager import RiskCheckFailed, RiskManager
 from trading_bot.core.strategy.base_strategy import Signal, SignalReason, SignalType
 from trading_bot.db import repository
 from trading_bot.db.models import Order
+from trading_bot.notifications.telegram_notifier import TelegramNotifier
 
 logger = logging.getLogger(__name__)
 
@@ -75,13 +76,17 @@ class PositionManager:
         order_manager: OrderManager,
         strategy,  # ComboStrategy (не типизируем для избежания циклических импортов)
         portfolio_manager: Optional[PortfolioManager] = None,
+        ticker: str = "",
+        notifier: Optional[TelegramNotifier] = None,
     ) -> None:
         self.instrument_id = instrument_id
         self.params = instrument_config
         self.order_manager = order_manager
         self.strategy = strategy
         self.portfolio_manager = portfolio_manager
-        self.risk_manager = RiskManager(instrument_id, instrument_config)
+        self.ticker = ticker
+        self.notifier = notifier
+        self.risk_manager = RiskManager(instrument_id, instrument_config, portfolio_manager)
 
         # Текущая открытая позиция (None если нет)
         self._position: Optional[OpenPosition] = None
@@ -116,19 +121,9 @@ class PositionManager:
             )
             return
 
-        # Сохраняем сигнал и отмечаем его как исполняемый
-        db_signal = repository.save_signal(
-            instrument_id=self.instrument_id,
-            signal_type=signal.signal_type.value,
-            ofi_value=signal.ofi_value or 0.0,
-            print_volume=signal.print_volume,
-            print_side=signal.print_side,
-            reason=signal.reason.value,
-            acted_on=True,
-        )
-
         if signal.signal_type in (SignalType.LONG, SignalType.SHORT):
-            # Глобальный лимит одновременных позиций
+            # Глобальный лимит одновременных позиций — проверяем ДО записи сигнала.
+            # Иначе сигнал попадёт в БД как acted_on=True, хотя ордер не выставлялся.
             if self.portfolio_manager and not self.portfolio_manager.can_open():
                 count = self.portfolio_manager.open_positions_count
                 max_pos = self.portfolio_manager._max_positions
@@ -136,12 +131,31 @@ class PositionManager:
                     f"Глобальный лимит позиций достигнут: {count}/{max_pos}. "
                     "Открытие заблокировано."
                 )
+                repository.save_signal(
+                    instrument_id=self.instrument_id,
+                    signal_type=signal.signal_type.value,
+                    ofi_value=signal.ofi_value or 0.0,
+                    print_volume=signal.print_volume,
+                    print_side=signal.print_side,
+                    reason=signal.reason.value,
+                    acted_on=False,
+                )
                 repository.log_event(
                     "WARNING",
                     "position_manager",
                     f"Открытие заблокировано: достигнут лимит {max_pos} одновременных позиций",
                 )
                 return
+
+            db_signal = repository.save_signal(
+                instrument_id=self.instrument_id,
+                signal_type=signal.signal_type.value,
+                ofi_value=signal.ofi_value or 0.0,
+                print_volume=signal.print_volume,
+                print_side=signal.print_side,
+                reason=signal.reason.value,
+                acted_on=True,
+            )
             self._open_position(signal, db_signal.id)
         elif signal.signal_type == SignalType.EXIT:
             # Проверяем минимальное время удержания позиции перед закрытием по OFI.
@@ -173,6 +187,15 @@ class PositionManager:
                             f"< минимум {min_profit_ticks} тиков (не покрывает комиссию)."
                         )
                         return
+            db_signal = repository.save_signal(
+                instrument_id=self.instrument_id,
+                signal_type=signal.signal_type.value,
+                ofi_value=signal.ofi_value or 0.0,
+                print_volume=signal.print_volume,
+                print_side=signal.print_side,
+                reason=signal.reason.value,
+                acted_on=True,
+            )
             self._close_position(signal, db_signal.id, exit_reason=signal.reason.value)
 
     def _open_position(self, signal: Signal, signal_id: int) -> None:
@@ -182,11 +205,12 @@ class PositionManager:
 
         # Рассчитываем размер позиции
         max_lots_cap = self.params.get("max_position_lots", None)
-        if self.portfolio_manager and self._last_price > 0:
+        if self.portfolio_manager:
             lot_size = self.params.get("lot_size", 1)
             quantity_lots = self.portfolio_manager.compute_lots(
-                current_price=self._last_price,
+                figi=figi,
                 lot_size=lot_size,
+                stream_price=self._last_price,   # 0.0 если стрим ещё не прогрелся
                 max_lots_cap=max_lots_cap,
             )
         else:
@@ -236,6 +260,15 @@ class PositionManager:
             f"Позиция открыта: {position_direction.upper()} "
             f"{quantity_lots} лотов @ {entry_price:.2f}"
         )
+
+        if self.notifier:
+            self.notifier.send_position_opened(
+                ticker=self.ticker,
+                direction=position_direction,
+                entry_price=entry_price,
+                quantity_lots=quantity_lots,
+                lot_size=self.params.get("lot_size", 1),
+            )
 
     def _close_position(self, signal: Signal, signal_id: int, exit_reason: str) -> None:
         """Закрыть текущую позицию."""
@@ -310,6 +343,20 @@ class PositionManager:
             f"Позиция закрыта: {pos.direction.upper()} @ {close_price:.2f}, "
             f"P&L={pnl_after_commission:.2f} руб."
         )
+
+        if self.notifier:
+            hold_secs = int((close_at - pos.open_at).total_seconds())
+            self.notifier.send_position_closed(
+                ticker=self.ticker,
+                direction=pos.direction,
+                entry_price=pos.entry_price,
+                close_price=close_price,
+                quantity_lots=pos.quantity_lots,
+                lot_size=self.params.get("lot_size", 1),
+                pnl=pnl_after_commission,
+                hold_seconds=hold_secs,
+                exit_reason=exit_reason,
+            )
 
         # Сбрасываем позицию
         self._position = None

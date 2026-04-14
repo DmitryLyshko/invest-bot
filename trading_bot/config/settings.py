@@ -27,7 +27,9 @@ WEB_HOST: str = os.environ.get("WEB_HOST", "127.0.0.1")
 WEB_PORT: int = int(os.environ.get("WEB_PORT", "5000"))
 
 # ─── Риск-менеджмент ──────────────────────────────────────────────────────────
-# Дневной лимит убытков в рублях. При достижении бот прекращает торговлю до след. дня.
+# Дневной лимит убытков в % от счёта (0.01 = 1%). При достижении торговля блокируется.
+DAILY_LOSS_LIMIT_PCT: float = float(os.environ.get("DAILY_LOSS_LIMIT_PCT", "0.01"))
+# Fallback лимит в рублях — используется если стоимость портфеля ещё не загружена.
 DAILY_LOSS_LIMIT_RUB: float = float(os.environ.get("DAILY_LOSS_LIMIT_RUB", "-500.0"))
 # Максимальное число одновременно открытых позиций (по всем тикерам)
 MAX_GLOBAL_POSITIONS: int = int(os.environ.get("MAX_GLOBAL_POSITIONS", "3"))
@@ -45,6 +47,11 @@ INSTRUMENTS_CONFIG_PATH: Path = BASE_DIR / "trading_bot" / "config" / "instrumen
 # ─── Режим работы ─────────────────────────────────────────────────────────────
 # SANDBOX=true — использовать песочницу T-Invest (тестовые ордера)
 USE_SANDBOX: bool = os.environ.get("SANDBOX", "false").lower() == "true"
+
+# ─── Telegram уведомления ─────────────────────────────────────────────────────
+# Токен бота (@BotFather) и ID чата (можно узнать через @userinfobot)
+TELEGRAM_BOT_TOKEN: str = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_CHAT_ID: str = os.environ.get("TELEGRAM_CHAT_ID", "")
 
 # ─── Запись рыночных данных для бэктеста ──────────────────────────────────────
 # RECORD_MARKET_DATA=true — писать снапшоты стакана и тики сделок в БД

@@ -30,6 +30,7 @@ from trading_bot.core.execution.portfolio_manager import PortfolioManager
 from trading_bot.core.execution.position_manager import PositionManager
 from trading_bot.core.strategy.combo_strategy import ComboStrategy
 from trading_bot.db import repository
+from trading_bot.notifications.telegram_notifier import TelegramNotifier
 from trading_bot.web.app import create_app, set_portfolio_manager, set_position_managers
 from trading_bot.web.auth import ensure_default_user
 
@@ -118,6 +119,7 @@ def build_components(
     instrument_params: dict,
     account_id: str,
     portfolio_manager: PortfolioManager,
+    notifier: TelegramNotifier,
 ):
     """Создать все торговые компоненты для одного инструмента."""
     instrument_id = instrument_params["db_instrument_id"]
@@ -130,6 +132,8 @@ def build_components(
         order_manager=order_manager,
         strategy=strategy,
         portfolio_manager=portfolio_manager,
+        ticker=ticker,
+        notifier=notifier,
     )
 
     return strategy, order_manager, position_manager
@@ -189,11 +193,19 @@ def main() -> None:
     # ── T-Invest: получаем account_id ─────────────────────────────────────────
     account_id = get_first_account_id()
 
+    # ── Telegram-уведомления ──────────────────────────────────────────────────
+    notifier = TelegramNotifier(
+        token=settings.TELEGRAM_BOT_TOKEN,
+        chat_id=settings.TELEGRAM_CHAT_ID,
+    )
+
     # ── Менеджер портфеля (общий для всех тикеров) ────────────────────────────
+    all_figis = [params["figi"] for params in instruments.values()]
     portfolio_manager = PortfolioManager(
         account_id=account_id,
         max_positions=settings.MAX_GLOBAL_POSITIONS,
         max_position_pct=settings.MAX_POSITION_PCT,
+        figis=all_figis,
     )
     portfolio_manager.refresh()
     logger.info(
@@ -211,7 +223,7 @@ def main() -> None:
 
     for ticker, params in instruments.items():
         strategy, order_manager, position_manager = build_components(
-            ticker, params, account_id, portfolio_manager
+            ticker, params, account_id, portfolio_manager, notifier
         )
         recorder = DataRecorder(figi=params["figi"], instrument_config=params)
         on_orderbook, on_trade = make_event_handlers(strategy, position_manager, recorder)
@@ -240,6 +252,19 @@ def main() -> None:
 
     # Обновлять стоимость портфеля каждую минуту
     scheduler.add_job(portfolio_manager.refresh, "interval", minutes=1, id="portfolio_refresh")
+
+    # Уведомление о начале торговой сессии — 10:05 МСК (07:05 UTC), по будням
+    all_tickers = list(instruments.keys())
+    scheduler.add_job(
+        notifier.send_trading_day_started,
+        "cron",
+        day_of_week="mon-fri",
+        hour=7,
+        minute=5,
+        kwargs={"tickers": all_tickers},
+        id="trading_day_start_notify",
+        timezone="UTC",
+    )
 
     scheduler.start()
     logger.info(f"Планировщик запущен для {len(instruments)} инструментов")
@@ -270,6 +295,8 @@ def main() -> None:
     tickers_str = ", ".join(instruments.keys())
     repository.log_event("INFO", "main", f"Бот запущен. Торгуем: {tickers_str}")
     logger.info(f"Бот запущен. Тикеры: {tickers_str}. Нажмите Ctrl+C для остановки.")
+
+    notifier.send_bot_started(tickers=list(instruments.keys()), sandbox=settings.USE_SANDBOX)
 
     # Главный поток ждёт сигнала остановки
     stop_event.wait()

@@ -6,7 +6,7 @@
 """
 import logging
 import threading
-from typing import Optional
+from typing import Dict, List, Optional
 
 from tinkoff.invest import Client
 from tinkoff.invest.sandbox.client import SandboxClient
@@ -23,6 +23,7 @@ class PortfolioManager:
 
     Функции:
     - Получает текущую стоимость счёта из T-Invest API (обновляется по расписанию)
+    - Запрашивает последние цены всех инструментов из API (актуальнее чем хардкод)
     - Отслеживает кол-во открытых позиций по всем тикерам
     - Рассчитывает доступный размер лота (N% от портфеля)
     - Блокирует открытие если достигнут лимит одновременных позиций
@@ -33,11 +34,15 @@ class PortfolioManager:
         account_id: str,
         max_positions: int,
         max_position_pct: float,
+        figis: Optional[List[str]] = None,
     ) -> None:
         self._account_id = account_id
         self._max_positions = max_positions
         self._max_position_pct = max_position_pct
         self._portfolio_value: float = 0.0
+        # figi → последняя известная цена из API
+        self._last_prices: Dict[str, float] = {}
+        self._figis: List[str] = figis or []
         # Множество instrument_id с открытыми позициями
         self._open_ids: set = set()
         self._lock = threading.Lock()
@@ -45,7 +50,12 @@ class PortfolioManager:
     # ── Portfolio value ─────────────────────────────────────────────────────────
 
     def refresh(self) -> None:
-        """Обновить стоимость портфеля из T-Invest API."""
+        """Обновить стоимость портфеля и последние цены из T-Invest API."""
+        self._refresh_portfolio()
+        if self._figis:
+            self._refresh_prices()
+
+    def _refresh_portfolio(self) -> None:
         try:
             if settings.USE_SANDBOX:
                 with SandboxClient(settings.TINKOFF_TOKEN) as client:
@@ -60,6 +70,36 @@ class PortfolioManager:
             logger.debug(f"Портфель обновлён: {value:.2f} руб.")
         except Exception as e:
             logger.error(f"Ошибка обновления стоимости портфеля: {e}")
+
+    def _refresh_prices(self) -> None:
+        """Запросить последние цены инструментов из market_data API."""
+        try:
+            # get_last_prices работает одинаково в sandbox и prod
+            if settings.USE_SANDBOX:
+                with SandboxClient(settings.TINKOFF_TOKEN) as client:
+                    resp = client.market_data.get_last_prices(figi=self._figis)
+            else:
+                with Client(settings.TINKOFF_TOKEN) as client:
+                    resp = client.market_data.get_last_prices(figi=self._figis)
+
+            prices = {}
+            for lp in resp.last_prices:
+                price = float(quotation_to_decimal(lp.price))
+                if price > 0:
+                    prices[lp.figi] = price
+
+            with self._lock:
+                self._last_prices.update(prices)
+
+            price_log = ", ".join(f"{figi[-4:]}={p:.2f}" for figi, p in prices.items())
+            logger.debug(f"Цены обновлены: {price_log}")
+        except Exception as e:
+            logger.error(f"Ошибка обновления цен инструментов: {e}")
+
+    def get_price(self, figi: str) -> Optional[float]:
+        """Последняя известная цена инструмента из API (None если не загружена)."""
+        with self._lock:
+            return self._last_prices.get(figi)
 
     @property
     def portfolio_value(self) -> float:
@@ -99,39 +139,48 @@ class PortfolioManager:
 
     def compute_lots(
         self,
-        current_price: float,
+        figi: str,
         lot_size: int,
+        stream_price: float = 0.0,
         max_lots_cap: Optional[int] = None,
     ) -> int:
         """
         Рассчитать кол-во лотов для новой позиции.
 
-        Логика: берём max_position_pct от портфеля и делим на стоимость одного лота.
-        Если стоимость портфеля ещё не загружена — возвращаем 1 (безопасный минимум).
+        Приоритет цены:
+          1. stream_price — свежая цена из торгового стрима (если > 0)
+          2. _last_prices[figi] — цена из последнего API refresh
+          3. fallback: max_lots_cap или 1 (логирует WARNING)
 
+        Логика: берём max_position_pct от портфеля и делим на стоимость одного лота.
         max_lots_cap — жёсткий потолок из конфига инструмента (опционально).
         """
         with self._lock:
             portfolio = self._portfolio_value
+            api_price = self._last_prices.get(figi, 0.0)
 
-        if portfolio <= 0 or current_price <= 0 or lot_size <= 0:
+        price = stream_price if stream_price > 0 else api_price
+
+        if portfolio <= 0 or price <= 0 or lot_size <= 0:
             fallback = max_lots_cap if (max_lots_cap and max_lots_cap > 0) else 1
             logger.warning(
-                f"Портфель не загружен или нулевая цена — используем {fallback} лот(ов)"
+                f"Портфель не загружен или цена неизвестна (figi={figi}) — "
+                f"используем {fallback} лот(ов)"
             )
             return fallback
 
         max_value = portfolio * self._max_position_pct
-        lots = int(max_value / (current_price * lot_size))
+        lots = int(max_value / (price * lot_size))
         lots = max(1, lots)
 
         if max_lots_cap and max_lots_cap > 0:
             lots = min(lots, max_lots_cap)
 
+        source = "стрим" if stream_price > 0 else "API"
         logger.debug(
-            f"Размер позиции: портфель={portfolio:.0f}₽, "
+            f"Размер позиции [{figi[-4:]}]: портфель={portfolio:.0f}₽, "
             f"лимит={max_value:.0f}₽ ({self._max_position_pct*100:.0f}%), "
-            f"цена={current_price:.2f}×{lot_size}лот → {lots} лот(ов)"
+            f"цена={price:.2f}×{lot_size}лот [{source}] → {lots} лот(ов)"
         )
         return lots
 
