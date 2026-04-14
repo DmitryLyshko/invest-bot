@@ -4,7 +4,7 @@
 {% block content %}
 <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem;">
     <h1 class="page-title" style="margin-bottom: 0;">Журнал сделок</h1>
-    <a href="{{ url_for('trades.export_csv', direction=direction, exit_reason=exit_reason, date_from=date_from, date_to=date_to) }}"
+    <a href="{{ url_for('trades.export_csv', direction=direction, exit_reason=exit_reason, date_from=date_from, date_to=date_to, strategy=strategy_filter) }}"
        class="btn btn-primary btn-sm">Экспорт CSV</a>
 </div>
 
@@ -28,19 +28,29 @@
             </select>
         </div>
         <div>
+            <label>Стратегия</label><br>
+            <select name="strategy">
+                <option value="">Все</option>
+                <option value="combo" {{ 'selected' if strategy_filter == 'combo' }}>Combo (OFI+Print)</option>
+                <option value="rsi" {{ 'selected' if strategy_filter == 'rsi' }}>RSI 5m</option>
+            </select>
+        </div>
+        <div>
             <label>Причина выхода</label><br>
             <select name="exit_reason">
                 <option value="">Все</option>
-                <option value="ofi_reversed" {{ 'selected' if exit_reason == 'ofi_reversed' }}>OFI разворот</option>
+                <option value="ofi_reversed" {{ 'selected' if exit_reason == 'ofi_reversed' }}>Разворот</option>
                 <option value="timeout" {{ 'selected' if exit_reason == 'timeout' }}>Тайм-аут</option>
                 <option value="stop_loss" {{ 'selected' if exit_reason == 'stop_loss' }}>Стоп-лосс</option>
+                <option value="take_profit" {{ 'selected' if exit_reason == 'take_profit' }}>Тейк-профит</option>
+                <option value="trailing_stop" {{ 'selected' if exit_reason == 'trailing_stop' }}>Трейлинг</option>
                 <option value="manual" {{ 'selected' if exit_reason == 'manual' }}>Вручную</option>
             </select>
         </div>
         <div style="margin-top: 1.25rem;">
             <button type="submit" class="btn btn-primary btn-sm">Применить</button>
         </div>
-        {% if direction or exit_reason or date_from or date_to %}
+        {% if direction or exit_reason or date_from or date_to or strategy_filter %}
         <div style="margin-top: 1.25rem;">
             <a href="{{ url_for('trades.index') }}" class="btn btn-sm" style="background: #2d3748; color: #a0aec0;">Сбросить</a>
         </div>
@@ -56,6 +66,7 @@
                 <tr>
                     <th>Открытие</th>
                     <th>Закрытие</th>
+                    <th>Стратегия</th>
                     <th>Напр.</th>
                     <th>Вход</th>
                     <th>Выход</th>
@@ -71,6 +82,12 @@
                 <tr>
                     <td style="white-space: nowrap; color: #a0aec0; font-size: 0.8rem;">{{ t.open_at.strftime('%d.%m.%y %H:%M') }}</td>
                     <td style="white-space: nowrap; color: #a0aec0; font-size: 0.8rem;">{{ t.close_at.strftime('%d.%m.%y %H:%M') }}</td>
+                    <td>
+                        {% set sname = t.strategy_name or 'combo' %}
+                        <span class="badge" style="background: {{ '#1a2d3a' if sname == 'rsi' else '#1a2a1a' }}; color: {{ '#63b3ed' if sname == 'rsi' else '#68d391' }};">
+                            {{ sname.upper() }}
+                        </span>
+                    </td>
                     <td><span class="badge badge-{{ t.direction }}">{{ t.direction }}</span></td>
                     <td>{{ '%.2f'|format(t.open_price) }}</td>
                     <td>{{ '%.2f'|format(t.close_price) }}</td>
@@ -86,7 +103,7 @@
                     <td style="color: #718096; font-size: 0.8rem;">{{ t.exit_reason }}</td>
                 </tr>
                 {% else %}
-                <tr><td colspan="10" style="text-align: center; color: #718096; padding: 2rem;">Сделок не найдено</td></tr>
+                <tr><td colspan="11" style="text-align: center; color: #718096; padding: 2rem;">Сделок не найдено</td></tr>
                 {% endfor %}
             </tbody>
         </table>
@@ -95,11 +112,11 @@
     {% if total_pages > 1 %}
     <div class="pagination">
         {% if page > 1 %}
-        <a href="?page={{ page - 1 }}&direction={{ direction }}&exit_reason={{ exit_reason }}&date_from={{ date_from }}&date_to={{ date_to }}">← Пред</a>
+        <a href="?page={{ page - 1 }}&direction={{ direction }}&exit_reason={{ exit_reason }}&date_from={{ date_from }}&date_to={{ date_to }}&strategy={{ strategy_filter }}">← Пред</a>
         {% endif %}
         <span class="current">{{ page }} / {{ total_pages }}</span>
         {% if page < total_pages %}
-        <a href="?page={{ page + 1 }}&direction={{ direction }}&exit_reason={{ exit_reason }}&date_from={{ date_from }}&date_to={{ date_to }}">След →</a>
+        <a href="?page={{ page + 1 }}&direction={{ direction }}&exit_reason={{ exit_reason }}&date_from={{ date_from }}&date_to={{ date_to }}&strategy={{ strategy_filter }}">След →</a>
         {% endif %}
     </div>
     {% endif %}

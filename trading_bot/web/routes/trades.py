@@ -22,6 +22,7 @@ def index():
     exit_reason = request.args.get("exit_reason", "")
     date_from_str = request.args.get("date_from", "")
     date_to_str = request.args.get("date_to", "")
+    strategy_filter = request.args.get("strategy", "")
 
     date_from = date.fromisoformat(date_from_str) if date_from_str else None
     date_to = date.fromisoformat(date_to_str) if date_to_str else None
@@ -33,6 +34,7 @@ def index():
         exit_reason=exit_reason or None,
         date_from=date_from,
         date_to=date_to,
+        strategy_name=strategy_filter or None,
     )
 
     total_pages = (total + per_page - 1) // per_page
@@ -47,6 +49,7 @@ def index():
         exit_reason=exit_reason,
         date_from=date_from_str,
         date_to=date_to_str,
+        strategy_filter=strategy_filter,
     )
 
 
@@ -57,6 +60,7 @@ def export_csv():
     exit_reason = request.args.get("exit_reason", "")
     date_from_str = request.args.get("date_from", "")
     date_to_str = request.args.get("date_to", "")
+    strategy_filter = request.args.get("strategy", "")
 
     date_from = date.fromisoformat(date_from_str) if date_from_str else None
     date_to = date.fromisoformat(date_to_str) if date_to_str else None
@@ -66,18 +70,20 @@ def export_csv():
         exit_reason=exit_reason or None,
         date_from=date_from,
         date_to=date_to,
+        strategy_name=strategy_filter or None,
     )
 
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow([
-        "ID", "Дата открытия", "Дата закрытия", "Направление",
+        "ID", "Стратегия", "Дата открытия", "Дата закрытия", "Направление",
         "Цена входа", "Цена выхода", "Лотов", "P&L руб",
         "Комиссия руб", "Время удержания (сек)", "Причина выхода",
     ])
     for t in trades:
         writer.writerow([
             t.id,
+            t.strategy_name or "combo",
             t.open_at.strftime("%Y-%m-%d %H:%M:%S") if t.open_at else "",
             t.close_at.strftime("%Y-%m-%d %H:%M:%S") if t.close_at else "",
             t.direction,

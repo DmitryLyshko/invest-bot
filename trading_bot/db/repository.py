@@ -100,6 +100,7 @@ def save_signal(
     print_side: Optional[str],
     reason: str,
     acted_on: bool = False,
+    strategy_name: str = "combo",
 ) -> Signal:
     with get_session() as session:
         sig = Signal(
@@ -110,6 +111,7 @@ def save_signal(
             print_side=print_side,
             reason=reason,
             acted_on=acted_on,
+            strategy_name=strategy_name,
         )
         session.add(sig)
         session.commit()
@@ -213,6 +215,7 @@ def save_trade(
     exit_reason: str,
     open_order_id: Optional[int] = None,
     close_order_id: Optional[int] = None,
+    strategy_name: str = "combo",
 ) -> Trade:
     hold_seconds = int((close_at - open_at).total_seconds())
     with get_session() as session:
@@ -230,6 +233,7 @@ def save_trade(
             exit_reason=exit_reason,
             open_order_id=open_order_id,
             close_order_id=close_order_id,
+            strategy_name=strategy_name,
         )
         session.add(trade)
         session.commit()
@@ -255,6 +259,7 @@ def get_trades_page(
     exit_reason: Optional[str] = None,
     date_from: Optional[date] = None,
     date_to: Optional[date] = None,
+    strategy_name: Optional[str] = None,
 ) -> tuple[List[Trade], int]:
     with get_session() as session:
         q = session.query(Trade)
@@ -266,6 +271,8 @@ def get_trades_page(
             q = q.filter(Trade.open_at >= date_from)
         if date_to:
             q = q.filter(Trade.open_at < date_to + timedelta(days=1))
+        if strategy_name:
+            q = q.filter(Trade.strategy_name == strategy_name)
         total = q.count()
         trades = q.order_by(Trade.close_at.desc()).offset((page - 1) * per_page).limit(per_page).all()
         return trades, total
@@ -276,6 +283,7 @@ def get_all_trades_for_export(
     exit_reason: Optional[str] = None,
     date_from: Optional[date] = None,
     date_to: Optional[date] = None,
+    strategy_name: Optional[str] = None,
 ) -> List[Trade]:
     with get_session() as session:
         q = session.query(Trade)
@@ -287,13 +295,50 @@ def get_all_trades_for_export(
             q = q.filter(Trade.open_at >= date_from)
         if date_to:
             q = q.filter(Trade.open_at < date_to + timedelta(days=1))
+        if strategy_name:
+            q = q.filter(Trade.strategy_name == strategy_name)
         return q.order_by(Trade.close_at.desc()).all()
 
 
-def get_stats_summary(instrument_id: Optional[int] = None) -> dict:
-    """Агрегированная статистика по сделкам (опционально по одному инструменту)."""
+def get_strategy_pnl_summary() -> List[dict]:
+    """P&L по стратегиям: [{strategy_name, total_pnl, total_trades, win_rate}]."""
     with get_session() as session:
-        filt = (Trade.instrument_id == instrument_id,) if instrument_id is not None else ()
+        rows = (
+            session.query(
+                Trade.strategy_name,
+                func.count(Trade.id).label("total_trades"),
+                func.sum(Trade.pnl_rub).label("total_pnl"),
+                func.sum(
+                    func.IF(Trade.pnl_rub > 0, 1, 0)
+                ).label("wins"),
+            )
+            .group_by(Trade.strategy_name)
+            .all()
+        )
+        result = []
+        for r in rows:
+            total = r.total_trades or 0
+            wins = int(r.wins or 0)
+            result.append({
+                "strategy_name": r.strategy_name or "combo",
+                "total_trades": total,
+                "total_pnl": round(float(r.total_pnl or 0), 2),
+                "win_rate": round(wins / total * 100, 1) if total else 0,
+            })
+        return result
+
+
+def get_stats_summary(
+    instrument_id: Optional[int] = None,
+    strategy_name: Optional[str] = None,
+) -> dict:
+    """Агрегированная статистика по сделкам (опционально по инструменту и/или стратегии)."""
+    with get_session() as session:
+        filt: tuple = ()
+        if instrument_id is not None:
+            filt += (Trade.instrument_id == instrument_id,)
+        if strategy_name is not None:
+            filt += (Trade.strategy_name == strategy_name,)
 
         total_trades = session.query(func.count(Trade.id)).filter(*filt).scalar() or 0
         if total_trades == 0:

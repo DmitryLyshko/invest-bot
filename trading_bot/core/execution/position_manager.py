@@ -74,10 +74,11 @@ class PositionManager:
         instrument_id: int,
         instrument_config: Dict[str, Any],
         order_manager: OrderManager,
-        strategy,  # ComboStrategy (не типизируем для избежания циклических импортов)
+        strategy,  # BaseStrategy subclass (не типизируем для избежания циклических импортов)
         portfolio_manager: Optional[PortfolioManager] = None,
         ticker: str = "",
         notifier: Optional[TelegramNotifier] = None,
+        strategy_name: str = "combo",
     ) -> None:
         self.instrument_id = instrument_id
         self.params = instrument_config
@@ -86,12 +87,37 @@ class PositionManager:
         self.portfolio_manager = portfolio_manager
         self.ticker = ticker
         self.notifier = notifier
+        self.strategy_name = strategy_name
         self.risk_manager = RiskManager(instrument_id, instrument_config, portfolio_manager)
 
         # Текущая открытая позиция (None если нет)
         self._position: Optional[OpenPosition] = None
         # Последняя известная рыночная цена (для расчёта размера лота)
         self._last_price: float = 0.0
+
+    # ── Helpers ───────────────────────────────────────────────────────────────
+
+    def _get_current_ofi(self) -> float:
+        """Получить текущий OFI-индикатор стратегии (совместимо с обоими стратегиями)."""
+        return getattr(self.strategy, "current_ofi", None) or 0.0
+
+    def _save_signal(self, *, signal_type: str, reason: str, acted_on: bool,
+                     ofi_value: float = 0.0, print_volume=None, print_side=None):
+        """Сохранить сигнал в БД с автоматической подстановкой strategy_name."""
+        return repository.save_signal(
+            instrument_id=self.instrument_id,
+            signal_type=signal_type,
+            ofi_value=ofi_value,
+            print_volume=print_volume,
+            print_side=print_side,
+            reason=reason,
+            acted_on=acted_on,
+            strategy_name=self.strategy_name,
+        )
+
+    def _save_trade(self, **kwargs):
+        """Сохранить сделку в БД с автоматической подстановкой strategy_name."""
+        return repository.save_trade(strategy_name=self.strategy_name, **kwargs)
 
     def on_signal(self, signal: Signal) -> None:
         """
@@ -110,8 +136,7 @@ class PositionManager:
         except RiskCheckFailed as e:
             # Риск-менеджер отказал — сохраняем сигнал как "не исполненный"
             logger.warning(f"Риск-менеджер: {e}")
-            repository.save_signal(
-                instrument_id=self.instrument_id,
+            self._save_signal(
                 signal_type=signal.signal_type.value,
                 ofi_value=signal.ofi_value or 0.0,
                 print_volume=signal.print_volume,
@@ -131,8 +156,7 @@ class PositionManager:
                     f"Глобальный лимит позиций достигнут: {count}/{max_pos}. "
                     "Открытие заблокировано."
                 )
-                repository.save_signal(
-                    instrument_id=self.instrument_id,
+                self._save_signal(
                     signal_type=signal.signal_type.value,
                     ofi_value=signal.ofi_value or 0.0,
                     print_volume=signal.print_volume,
@@ -147,8 +171,7 @@ class PositionManager:
                 )
                 return
 
-            db_signal = repository.save_signal(
-                instrument_id=self.instrument_id,
+            db_signal = self._save_signal(
                 signal_type=signal.signal_type.value,
                 ofi_value=signal.ofi_value or 0.0,
                 print_volume=signal.print_volume,
@@ -187,8 +210,7 @@ class PositionManager:
                             f"< минимум {min_profit_ticks} тиков (не покрывает комиссию)."
                         )
                         return
-            db_signal = repository.save_signal(
-                instrument_id=self.instrument_id,
+            db_signal = self._save_signal(
                 signal_type=signal.signal_type.value,
                 ofi_value=signal.ofi_value or 0.0,
                 print_volume=signal.print_volume,
@@ -345,7 +367,7 @@ class PositionManager:
             )
 
         # Записываем завершённую сделку в БД
-        repository.save_trade(
+        self._save_trade(
             instrument_id=self.instrument_id,
             direction=pos.direction,
             open_price=pos.entry_price,
@@ -405,12 +427,9 @@ class PositionManager:
                 reason=SignalReason.TIMEOUT,
             )
             # Сохраняем сигнал и закрываем позицию
-            db_signal = repository.save_signal(
-                instrument_id=self.instrument_id,
+            db_signal = self._save_signal(
                 signal_type="exit",
-                ofi_value=self.strategy.current_ofi or 0.0,
-                print_volume=None,
-                print_side=None,
+                ofi_value=self._get_current_ofi(),
                 reason="timeout",
                 acted_on=True,
             )
@@ -471,12 +490,9 @@ class PositionManager:
                     f"стоп={stop_price:.4f}, цена={current_price:.4f} "
                     f"(откат {gave_back:.1f} тиков)"
                 )
-                db_signal = repository.save_signal(
-                    instrument_id=self.instrument_id,
+                db_signal = self._save_signal(
                     signal_type="exit",
-                    ofi_value=self.strategy.current_ofi or 0.0,
-                    print_volume=None,
-                    print_side=None,
+                    ofi_value=self._get_current_ofi(),
                     reason="trailing_stop",
                     acted_on=True,
                 )
@@ -501,12 +517,9 @@ class PositionManager:
             if pos.stop_at_breakeven:
                 if loss_distance > 0:
                     logger.info(f"БЕЗУБЫТОК сработал: цена вернулась за точку входа {pos.entry_price:.2f}")
-                    db_signal = repository.save_signal(
-                        instrument_id=self.instrument_id,
+                    db_signal = self._save_signal(
                         signal_type="exit",
-                        ofi_value=self.strategy.current_ofi or 0.0,
-                        print_volume=None,
-                        print_side=None,
+                        ofi_value=self._get_current_ofi(),
                         reason="breakeven_stop",
                         acted_on=True,
                     )
@@ -523,12 +536,9 @@ class PositionManager:
                         f"СТОП-ЛОСС: движение против позиции {loss_distance:.4f} >= {stop_distance:.4f} "
                         f"({stop_ticks} тиков)"
                     )
-                    db_signal = repository.save_signal(
-                        instrument_id=self.instrument_id,
+                    db_signal = self._save_signal(
                         signal_type="exit",
-                        ofi_value=self.strategy.current_ofi or 0.0,
-                        print_volume=None,
-                        print_side=None,
+                        ofi_value=self._get_current_ofi(),
                         reason="stop_loss",
                         acted_on=True,
                     )
@@ -549,12 +559,9 @@ class PositionManager:
                     f"({take_profit_ticks} тиков)"
                 )
                 tp_signal = Signal(signal_type=SignalType.EXIT, reason=SignalReason.TAKE_PROFIT)
-                db_signal = repository.save_signal(
-                    instrument_id=self.instrument_id,
+                db_signal = self._save_signal(
                     signal_type="exit",
-                    ofi_value=self.strategy.current_ofi or 0.0,
-                    print_volume=None,
-                    print_side=None,
+                    ofi_value=self._get_current_ofi(),
                     reason="take_profit",
                     acted_on=True,
                 )

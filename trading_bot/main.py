@@ -29,6 +29,7 @@ from trading_bot.core.execution.order_manager import OrderManager
 from trading_bot.core.execution.portfolio_manager import PortfolioManager
 from trading_bot.core.execution.position_manager import PositionManager
 from trading_bot.core.strategy.combo_strategy import ComboStrategy
+from trading_bot.core.strategy.rsi_strategy import RSIStrategy
 from trading_bot.db import repository
 from trading_bot.db.clickhouse import init_clickhouse
 from trading_bot.notifications.telegram_notifier import TelegramNotifier
@@ -58,10 +59,21 @@ def setup_logging() -> None:
     )
 
 
+RSI_CONFIG_PATH = settings.INSTRUMENTS_CONFIG_PATH.parent / "rsi_config.yaml"
+
+
 def load_instruments_config() -> dict:
     """Загрузить конфигурацию инструментов из YAML."""
     with open(settings.INSTRUMENTS_CONFIG_PATH, "r", encoding="utf-8") as f:
         return yaml.safe_load(f)
+
+
+def load_rsi_config() -> dict:
+    """Загрузить конфигурацию RSI-стратегии из YAML. Возвращает {} если файл не найден."""
+    if not RSI_CONFIG_PATH.exists():
+        return {}
+    with open(RSI_CONFIG_PATH, "r", encoding="utf-8") as f:
+        return yaml.safe_load(f) or {}
 
 
 def sync_instruments_to_db(config: dict) -> Dict[str, dict]:
@@ -122,7 +134,7 @@ def build_components(
     portfolio_manager: PortfolioManager,
     notifier: TelegramNotifier,
 ):
-    """Создать все торговые компоненты для одного инструмента."""
+    """Создать все торговые компоненты для одного инструмента (стратегия Combo)."""
     instrument_id = instrument_params["db_instrument_id"]
 
     strategy = ComboStrategy(instrument_params)
@@ -135,6 +147,49 @@ def build_components(
         portfolio_manager=portfolio_manager,
         ticker=ticker,
         notifier=notifier,
+        strategy_name="combo",
+    )
+
+    return strategy, order_manager, position_manager
+
+
+def build_rsi_components(
+    ticker: str,
+    instrument_params: dict,
+    rsi_params: dict,
+    account_id: str,
+    portfolio_manager: PortfolioManager,
+    notifier: TelegramNotifier,
+):
+    """
+    Создать компоненты RSI-стратегии для одного инструмента.
+
+    instrument_params — данные из instruments.yaml (figi, instrument_id, lot_size, tick_size, …)
+    rsi_params        — данные из rsi_config.yaml (алго-параметры + риск-параметры RSI)
+    """
+    instrument_id = instrument_params["db_instrument_id"]
+
+    # Мержим: базовые параметры инструмента + RSI-специфичные параметры
+    merged = {
+        "figi": instrument_params["figi"],
+        "instrument_id": instrument_params.get("instrument_id", ""),
+        "lot_size": instrument_params["lot_size"],
+        "tick_size": instrument_params.get("tick_size", 0.01),
+        "commission_rate": instrument_params.get("commission_rate", 0.0004),
+        **rsi_params,
+    }
+
+    strategy = RSIStrategy(merged)
+    order_manager = OrderManager(account_id, instrument_id)
+    position_manager = PositionManager(
+        instrument_id=instrument_id,
+        instrument_config=merged,
+        order_manager=order_manager,
+        strategy=strategy,
+        portfolio_manager=portfolio_manager,
+        ticker=ticker,
+        notifier=notifier,
+        strategy_name="rsi",
     )
 
     return strategy, order_manager, position_manager
@@ -191,6 +246,8 @@ def main() -> None:
     # ── Загрузка инструментов ─────────────────────────────────────────────────
     config = load_instruments_config()
     instruments = sync_instruments_to_db(config)
+    rsi_config = load_rsi_config()
+    logger.info(f"RSI-конфиг загружен для тикеров: {list(rsi_config.keys()) or '[]'}")
 
     # ── T-Invest: получаем account_id ─────────────────────────────────────────
     account_id = get_first_account_id()
@@ -251,6 +308,59 @@ def main() -> None:
 
         position_managers[ticker] = position_manager
         all_streams.append(stream)
+
+    # ── RSI-стратегия (5-минутные свечи) ─────────────────────────────────────
+    for ticker, rsi_params in rsi_config.items():
+        if ticker not in instruments:
+            logger.warning(f"RSI: тикер {ticker} из rsi_config.yaml не найден в instruments.yaml, пропускаем")
+            continue
+
+        params = instruments[ticker]
+        rsi_key = f"rsi_{ticker}"
+
+        rsi_strategy, rsi_order_manager, rsi_position_manager = build_rsi_components(
+            ticker=ticker,
+            instrument_params=params,
+            rsi_params=rsi_params,
+            account_id=account_id,
+            portfolio_manager=portfolio_manager,
+            notifier=notifier,
+        )
+        recorder_rsi = DataRecorder(figi=params["figi"], instrument_config=params)
+        _, on_trade_rsi = make_event_handlers(rsi_strategy, rsi_position_manager, recorder_rsi)
+
+        # RSI использует только on_trade (candle aggregator), on_orderbook — no-op
+        def _make_rsi_on_orderbook(strat, pm, rec):
+            def on_ob(data):
+                rec.on_orderbook(data)
+                strat.on_orderbook(data)
+            return on_ob
+
+        on_orderbook_rsi = _make_rsi_on_orderbook(rsi_strategy, rsi_position_manager, recorder_rsi)
+
+        rsi_stream = StreamHandler(
+            figi=params["figi"],
+            on_orderbook=on_orderbook_rsi,
+            on_trade=on_trade_rsi,
+            orderbook_depth=10,
+            instrument_id=params.get("instrument_id", ""),
+        )
+
+        t_rsi = threading.Thread(
+            target=rsi_stream.start, daemon=True, name=f"rsi_stream_{ticker}"
+        )
+        t_rsi.start()
+        logger.info(f"RSI стрим запущен для {ticker}")
+
+        scheduler.add_job(
+            rsi_position_manager.check_timeout,
+            "interval",
+            minutes=1,
+            id=f"rsi_timeout_check_{ticker}",
+        )
+
+        position_managers[rsi_key] = rsi_position_manager
+        all_streams.append(rsi_stream)
 
     # Обновлять стоимость портфеля каждую минуту
     scheduler.add_job(portfolio_manager.refresh, "interval", minutes=1, id="portfolio_refresh")

@@ -72,8 +72,11 @@ class Signal(Base):
     # stop_loss       — сработал стоп-лосс (выход)
     reason = Column(String(30), nullable=True)
 
-    # Был ли выставлен ордер на основе этого сигнала
+    # Была ли выставлен ордер на основе этого сигнала
     acted_on = Column(Boolean, default=False, nullable=False)
+
+    # Название стратегии: 'combo' (OFI+Print) или 'rsi' (Augmented RSI 5m)
+    strategy_name = Column(String(50), default="combo", nullable=True)
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
@@ -139,6 +142,9 @@ class Trade(Base):
 
     # ofi_reversed / manual / risk_limit / timeout / stop_loss
     exit_reason = Column(String(30), nullable=False)
+
+    # Название стратегии: 'combo' (OFI+Print) или 'rsi' (Augmented RSI 5m)
+    strategy_name = Column(String(50), default="combo", nullable=True)
 
     instrument = relationship("Instrument", back_populates="trades")
     open_order = relationship("Order", foreign_keys=[open_order_id])

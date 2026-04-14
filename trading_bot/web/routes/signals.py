@@ -34,6 +34,8 @@ def index():
 @login_required
 def index():
     current_ticker = request.args.get("ticker", "").strip().upper()
+    current_strategy = request.args.get("strategy", "").strip().lower()
+
     instrument_id = None
     if current_ticker:
         inst = repository.get_instrument_by_ticker(current_ticker)
@@ -42,11 +44,17 @@ def index():
         else:
             current_ticker = ""
 
+    strategy_filter = current_strategy if current_strategy in ("combo", "rsi") else None
+
     instruments = repository.get_active_instruments()
-    stats = repository.get_stats_summary(instrument_id=instrument_id)
+    stats = repository.get_stats_summary(
+        instrument_id=instrument_id,
+        strategy_name=strategy_filter,
+    )
     pnl_by_hour = repository.get_pnl_by_hour(instrument_id=instrument_id)
     pnl_by_weekday = repository.get_pnl_by_weekday(instrument_id=instrument_id)
     pnl_by_day = repository.get_pnl_by_day(days=90)
+    strategy_summary = repository.get_strategy_pnl_summary()
 
     return render_template(
         "stats.html",
@@ -56,4 +64,6 @@ def index():
         pnl_by_day=json.dumps(pnl_by_day),
         instruments=instruments,
         current_ticker=current_ticker,
+        current_strategy=current_strategy,
+        strategy_summary=strategy_summary,
     )

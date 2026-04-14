@@ -3,7 +3,9 @@
 
 {% block content %}
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-    <h1 class="page-title" style="margin-bottom: 0;">Статистика{% if current_ticker %} — {{ current_ticker }}{% endif %}</h1>
+    <h1 class="page-title" style="margin-bottom: 0;">
+        Статистика{% if current_ticker %} — {{ current_ticker }}{% endif %}{% if current_strategy %} / {{ current_strategy.upper() }}{% endif %}
+    </h1>
     <form method="get" class="form-row" style="margin-bottom: 0; gap: 0.5rem;">
         <select name="ticker" style="min-width: 120px;">
             <option value="">Все тикеры</option>
@@ -11,12 +13,36 @@
             <option value="{{ inst.ticker }}" {{ 'selected' if inst.ticker == current_ticker }}>{{ inst.ticker }}</option>
             {% endfor %}
         </select>
+        <select name="strategy" style="min-width: 130px;">
+            <option value="">Все стратегии</option>
+            <option value="combo" {{ 'selected' if current_strategy == 'combo' }}>Combo (OFI+Print)</option>
+            <option value="rsi" {{ 'selected' if current_strategy == 'rsi' }}>RSI 5m</option>
+        </select>
         <button type="submit" class="btn btn-primary btn-sm">Применить</button>
-        {% if current_ticker %}
+        {% if current_ticker or current_strategy %}
         <a href="{{ url_for('stats.index') }}" style="font-size: 0.85rem; color: #718096;">Сбросить</a>
         {% endif %}
     </form>
 </div>
+
+<!-- Strategy breakdown -->
+{% if strategy_summary %}
+<div class="grid" style="grid-template-columns: repeat({{ [strategy_summary|length, 4]|min }}, 1fr); margin-bottom: 1.5rem;">
+    {% for s in strategy_summary %}
+    <a href="{{ url_for('stats.index', strategy=s.strategy_name, ticker=current_ticker) }}" style="text-decoration: none;">
+    <div class="card" style="border-color: {{ '#2d4a6a' if s.strategy_name == 'rsi' else '#2d4a3a' }}; cursor: pointer;">
+        <div class="card-title">{{ s.strategy_name.upper() }}</div>
+        <div class="card-value {{ 'positive' if s.total_pnl >= 0 else 'negative' }}" style="font-size: 1.4rem;">
+            {{ '{:+.2f}'.format(s.total_pnl) }} ₽
+        </div>
+        <div style="font-size: 0.75rem; color: #718096; margin-top: 0.25rem;">
+            {{ s.total_trades }} сделок · {{ s.win_rate }}% wins
+        </div>
+    </div>
+    </a>
+    {% endfor %}
+</div>
+{% endif %}
 
 <!-- Summary KPIs -->
 <div class="grid grid-4" style="margin-bottom: 1.5rem;">
