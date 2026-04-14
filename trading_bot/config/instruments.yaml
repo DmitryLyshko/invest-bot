@@ -7,7 +7,7 @@ SBER:
   lot_size: 10
   commission_rate: 0.0004
   ofi_threshold: 0.75
-  print_multiplier: 50.0
+  print_multiplier: 200.0
   print_window: 200
   ofi_levels: 5
   cooldown_seconds: 60
@@ -39,7 +39,7 @@ GMKN:
   lot_size: 10
   commission_rate: 0.0004
   ofi_threshold: 0.75
-  print_multiplier: 50.0
+  print_multiplier: 62.0
   print_window: 200
   ofi_levels: 5
   cooldown_seconds: 90
@@ -71,7 +71,7 @@ VTBR:
   lot_size: 1
   commission_rate: 0.0004
   ofi_threshold: 0.7
-  print_multiplier: 50.0
+  print_multiplier: 200.0
   print_window: 300
   ofi_levels: 5
   cooldown_seconds: 60
@@ -135,7 +135,7 @@ GAZP:
   lot_size: 10
   commission_rate: 0.0004
   ofi_threshold: 0.72
-  print_multiplier: 50.0
+  print_multiplier: 105.0
   print_window: 200
   ofi_levels: 5
   cooldown_seconds: 60
@@ -167,7 +167,7 @@ NVTK:
   lot_size: 1
   commission_rate: 0.0004
   ofi_threshold: 0.73
-  print_multiplier: 50.0
+  print_multiplier: 30.0
   print_window: 150
   ofi_levels: 5
   cooldown_seconds: 90
@@ -199,7 +199,7 @@ ROSN:
   lot_size: 1
   commission_rate: 0.0004
   ofi_threshold: 0.72
-  print_multiplier: 50.0
+  print_multiplier: 151.0
   print_window: 200
   ofi_levels: 5
   cooldown_seconds: 60
@@ -295,7 +295,7 @@ PLZL:
   lot_size: 1
   commission_rate: 0.0004
   ofi_threshold: 0.75
-  print_multiplier: 50.0
+  print_multiplier: 31.0
   print_window: 100
   ofi_levels: 5
   cooldown_seconds: 90
@@ -359,7 +359,7 @@ NLMK:
   lot_size: 10
   commission_rate: 0.0004
   ofi_threshold: 0.72
-  print_multiplier: 50.0
+  print_multiplier: 71.0
   print_window: 200
   ofi_levels: 5
   cooldown_seconds: 60
@@ -423,7 +423,7 @@ ALRS:
   lot_size: 10
   commission_rate: 0.0004
   ofi_threshold: 0.72
-  print_multiplier: 50.0
+  print_multiplier: 64.0
   print_window: 200
   ofi_levels: 5
   cooldown_seconds: 60
@@ -455,7 +455,7 @@ MTSS:
   lot_size: 10
   commission_rate: 0.0004
   ofi_threshold: 0.72
-  print_multiplier: 50.0
+  print_multiplier: 34.0
   print_window: 200
   ofi_levels: 5
   cooldown_seconds: 60
@@ -519,7 +519,7 @@ AFLT:
   lot_size: 10
   commission_rate: 0.0004
   ofi_threshold: 0.72
-  print_multiplier: 50.0
+  print_multiplier: 39.0
   print_window: 200
   ofi_levels: 5
   cooldown_seconds: 60
@@ -551,7 +551,7 @@ MGNT:
   lot_size: 1
   commission_rate: 0.0004
   ofi_threshold: 0.75
-  print_multiplier: 50.0
+  print_multiplier: 21.0
   print_window: 100
   ofi_levels: 5
   cooldown_seconds: 120
@@ -583,7 +583,7 @@ MOEX:
   lot_size: 10
   commission_rate: 0.0004
   ofi_threshold: 0.73
-  print_multiplier: 50.0
+  print_multiplier: 18.0
   print_window: 150
   ofi_levels: 5
   cooldown_seconds: 90
