@@ -53,6 +53,8 @@ def _form_to_params(form) -> dict:
         "trend_ma_window": int(form.get("trend_ma_window", 1000)),
         "min_ofi_entry_confirmations": int(form.get("min_ofi_entry_confirmations", 1)),
         "trailing_stop_ticks": int(form.get("trailing_stop_ticks", 0)),
+        "print_max_age_seconds": int(form.get("print_max_age_seconds", 15)),
+        "ofi_auto_calibrate_window": int(form.get("ofi_auto_calibrate_window", 0)),
     }
 
 
@@ -151,6 +153,8 @@ def add():
             "trend_ma_window": 1000,
             "min_ofi_entry_confirmations": 1,
             "trailing_stop_ticks": 0,
+            "print_max_age_seconds": 15,
+            "ofi_auto_calibrate_window": 0,
         }
         _save_yaml(yaml_config)
         _upsert_db(ticker, yaml_config[ticker])

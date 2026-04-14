@@ -120,6 +120,7 @@ SBER:
   min_ofi_confirmations: 4    # подтверждений подряд для выхода по OFI
   print_multiplier: 50.0      # объём >= медиана * multiplier → крупный принт
   print_window: 200           # размер окна медианы объёмов
+  print_max_age_seconds: 15   # принт старше этого — не считается (15с для ликвидных, 25-30с для неликвидных)
 
   # Cooldown
   cooldown_seconds: 60        # между сигналами входа
@@ -130,6 +131,7 @@ SBER:
   min_hold_seconds: 120       # минимальное время до OFI-выхода
   min_profit_ticks_for_ofi_exit: 28  # OFI-выход блокируется при малой прибыли
   ofi_scale: 1000                    # масштаб tanh-нормализации (подбирается под ликвидность инструмента)
+  ofi_auto_calibrate_window: 0       # > 0: первые N снапшотов → p90(|raw_ofi|) заменяет ofi_scale; 0 = откл
   trend_ma_window: 1000              # окно MA mid-цен для фильтра тренда (0 = выкл)
   min_ofi_entry_confirmations: 3     # N подряд OFI-чтений выше порога до генерации сигнала входа
   max_position_lots: 1
@@ -172,15 +174,17 @@ class BaseStrategy(ABC):
 ### `ofi_calculator.py`
 ```python
 class OFICalculator:
-    __init__(ofi_levels: int, smooth_window: int = 1)
+    __init__(ofi_levels: int, smooth_window: int = 1, ofi_scale: float = 1000.0, calibrate_window: int = 0)
     update(bids, asks) → float | None   # None на первом снапшоте
     reset()
-    # property: last_ofi
+    # properties: last_ofi, is_calibrated
 ```
 Алгоритм: Cont-Kukanov-Stoikov по топ N уровней. Нормализация через `tanh(raw / ofi_scale)`.
 `ofi_scale` берётся из конфига инструмента (дефолт 1000). Подбирается под ликвидность: при raw OFI ≈ ofi_scale → tanh ≈ 0.76. Слишком большой → OFI всегда около 0; слишком маленький → всегда ±1.
 Сглаживание: скользящее среднее по `smooth_window` последних значений.
 `_prev_bids/_prev_asks` хранят предыдущий снапшот для вычисления дельты.
+
+**Авто-калибровка** (`calibrate_window > 0`): первые N снапшотов накапливают `|raw_ofi|`, затем p90 заменяет `ofi_scale`. Логика: при `raw_ofi = p90 → tanh(1) ≈ 0.76`, то есть 90% обычных снапшотов дадут OFI ниже порога входа. После калибровки в лог пишется `scale X → Y`. Для уже откалиброванных инструментов держать `ofi_auto_calibrate_window: 0`.
 
 ### `print_detector.py`
 ```python

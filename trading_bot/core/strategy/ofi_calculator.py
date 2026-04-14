@@ -17,6 +17,8 @@ import math
 from collections import deque
 from typing import Any, Dict, Deque, List, Optional, Tuple
 
+_CALIBRATION_PERCENTILE = 0.90  # p90: 90% снапшотов дадут OFI ниже порога насыщения
+
 logger = logging.getLogger(__name__)
 
 
@@ -29,7 +31,13 @@ class OFICalculator:
       - smooth_window:    int — окно сглаживания по скользящему среднему (обычно 5–20)
     """
 
-    def __init__(self, ofi_levels: int, smooth_window: int = 1, ofi_scale: float = 1000.0) -> None:
+    def __init__(
+        self,
+        ofi_levels: int,
+        smooth_window: int = 1,
+        ofi_scale: float = 1000.0,
+        calibrate_window: int = 0,
+    ) -> None:
         # Количество уровней стакана для анализа
         self.ofi_levels = ofi_levels
 
@@ -42,6 +50,15 @@ class OFICalculator:
         # Слишком большой scale → OFI всегда около 0, не достигает порога.
         # Слишком маленький scale → OFI всегда ±1, нет дифференциации.
         self.ofi_scale = max(1.0, ofi_scale)
+
+        # Авто-калибровка масштаба.
+        # calibrate_window > 0: первые N снапшотов используются для вычисления
+        # p90 от |raw_ofi|, который затем заменяет ofi_scale.
+        # После калибровки режим отключается до следующего reset().
+        # calibrate_window = 0: калибровка отключена, используется ofi_scale из конфига.
+        self._calibrate_window: int = calibrate_window
+        self._calibrate_samples: List[float] = []
+        self._calibrated: bool = calibrate_window == 0
 
         # Предыдущее состояние стакана — нужно для вычисления дельты
         self._prev_bids: List[Tuple[float, int]] = []  # [(price, qty), ...]
@@ -85,10 +102,14 @@ class OFICalculator:
         # ask_ofi — давление продавцов (знак инвертируется при сложении)
         total_flow = bid_ofi - ask_ofi
 
+        # Авто-калибровка: накапливаем |raw_ofi| до заполнения окна.
+        # Торговля идёт с исходным ofi_scale, пока калибровка не завершена.
+        if not self._calibrated:
+            self._calibrate_samples.append(abs(total_flow))
+            if len(self._calibrate_samples) >= self._calibrate_window:
+                self._finish_calibration()
+
         # Нормализуем итоговое значение в диапазон [-1, 1].
-        # Максимально возможный вклад с каждой стороны = ofi_levels × MAX_MULTIPLIER.
-        # Мы используем нормализацию через максимум наблюдённых значений
-        # (adaptive), но для простоты — через заданный масштаб.
         ofi_normalized = self._normalize(total_flow)
 
         # Сглаживаем OFI по скользящему окну чтобы убрать краткосрочный шум стакана.
@@ -159,6 +180,34 @@ class OFICalculator:
 
         return ofi
 
+    def _finish_calibration(self) -> None:
+        """
+        Завершить калибровку: вычислить p90 от накопленных |raw_ofi|
+        и заменить им ofi_scale.
+
+        Логика: при raw_ofi = p90 → tanh(p90 / p90) = tanh(1) ≈ 0.76.
+        Это значит, что 90% обычных снапшотов дадут OFI ниже 0.76,
+        и только сильные дисбалансы превысят типичный порог входа 0.7–0.75.
+        Инструмент сам «рассказывает», каков его нормальный поток ордеров.
+        """
+        samples = sorted(self._calibrate_samples)
+        p90_idx = int(len(samples) * _CALIBRATION_PERCENTILE)
+        p90 = samples[min(p90_idx, len(samples) - 1)]
+        if p90 > 0:
+            old_scale = self.ofi_scale
+            self.ofi_scale = p90
+            logger.info(
+                f"OFI авто-калибровка завершена: scale {old_scale:.0f} → {p90:.0f} "
+                f"(p90 по {len(samples)} снапшотам)"
+            )
+        else:
+            logger.warning(
+                "OFI авто-калибровка: p90=0, scale не изменён "
+                f"(накоплено {len(samples)} нулевых снапшотов)"
+            )
+        self._calibrated = True
+        self._calibrate_samples.clear()
+
     def _normalize(self, raw_ofi: float) -> float:
         """
         Нормализовать сырой OFI в диапазон [-1, 1] через tanh.
@@ -179,9 +228,16 @@ class OFICalculator:
         """Последнее рассчитанное значение OFI (без пересчёта)."""
         return self._last_ofi
 
+    @property
+    def is_calibrated(self) -> bool:
+        """Завершена ли авто-калибровка (или она отключена)."""
+        return self._calibrated
+
     def reset(self) -> None:
         """Сбросить состояние — используется при переподключении стрима."""
         self._prev_bids = []
         self._prev_asks = []
         self._ofi_history.clear()
         self._last_ofi = None
+        self._calibrated = self._calibrate_window == 0
+        self._calibrate_samples.clear()

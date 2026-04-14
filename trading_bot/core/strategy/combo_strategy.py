@@ -50,6 +50,7 @@ class ComboStrategy(BaseStrategy):
             ofi_levels=self.params["ofi_levels"],
             smooth_window=self.params.get("ofi_smooth_window", 1),
             ofi_scale=self.params.get("ofi_scale", 1000.0),
+            calibrate_window=self.params.get("ofi_auto_calibrate_window", 0),
         )
         self.print_detector = PrintDetector(
             print_window=self.params["print_window"],
@@ -118,6 +119,7 @@ class ComboStrategy(BaseStrategy):
                 ofi_levels=self.params["ofi_levels"],
                 smooth_window=self.params.get("ofi_smooth_window", 1),
                 ofi_scale=self.params.get("ofi_scale", 1000.0),
+                calibrate_window=self.params.get("ofi_auto_calibrate_window", 0),
             )
         if hasattr(self, "print_detector"):
             self.print_detector = PrintDetector(
@@ -216,10 +218,14 @@ class ComboStrategy(BaseStrategy):
             # Нет недавнего крупного принта — одного OFI недостаточно
             return None
 
-        # Проверяем свежесть принта: он должен быть не старше 15 секунд
-        # (устаревший принт уже не несёт актуальной информации)
+        # Проверяем свежесть принта: он не должен быть старше print_max_age_seconds.
+        # Ликвидные инструменты (SBER) — 15с; менее ликвидные (PLZL, MGNT) — 25-30с.
+        print_max_age = self.params.get("print_max_age_seconds", 15)
         print_age = (timestamp - last_print.timestamp).total_seconds()
-        if print_age > 15:
+        if print_age > print_max_age:
+            logger.debug(
+                f"Принт устарел: возраст {print_age:.1f}с > {print_max_age}с, пропуск"
+            )
             return None
 
         # ── Фильтр тренда ─────────────────────────────────────────────────

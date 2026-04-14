@@ -4,6 +4,8 @@ Flask приложение — веб-дашборд торгового бота
 import logging
 from typing import Optional
 
+from urllib.parse import urlparse
+
 from flask import Flask, abort, redirect, render_template, request, url_for
 from flask_login import LoginManager, login_required, login_user, logout_user
 
@@ -69,7 +71,9 @@ def create_app() -> Flask:
             user = authenticate(username, password)
             if user:
                 login_user(user)
-                next_url = request.args.get("next", url_for("dashboard.index"))
+                next_url = request.args.get("next", "")
+                if not next_url or urlparse(next_url).netloc:
+                    next_url = url_for("dashboard.index")
                 return redirect(next_url)
             error = "Неверный логин или пароль"
         return render_template("login.html", error=error)
