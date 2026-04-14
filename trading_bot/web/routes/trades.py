@@ -23,6 +23,7 @@ def index():
     date_from_str = request.args.get("date_from", "")
     date_to_str = request.args.get("date_to", "")
     strategy_filter = request.args.get("strategy", "")
+    ticker_filter = request.args.get("ticker", "")
 
     date_from = date.fromisoformat(date_from_str) if date_from_str else None
     date_to = date.fromisoformat(date_to_str) if date_to_str else None
@@ -35,9 +36,11 @@ def index():
         date_from=date_from,
         date_to=date_to,
         strategy_name=strategy_filter or None,
+        ticker=ticker_filter or None,
     )
 
     total_pages = (total + per_page - 1) // per_page
+    instruments = repository.get_active_instruments()
 
     return render_template(
         "trades.html",
@@ -50,6 +53,8 @@ def index():
         date_from=date_from_str,
         date_to=date_to_str,
         strategy_filter=strategy_filter,
+        ticker_filter=ticker_filter,
+        instruments=instruments,
     )
 
 
@@ -61,6 +66,7 @@ def export_csv():
     date_from_str = request.args.get("date_from", "")
     date_to_str = request.args.get("date_to", "")
     strategy_filter = request.args.get("strategy", "")
+    ticker_filter = request.args.get("ticker", "")
 
     date_from = date.fromisoformat(date_from_str) if date_from_str else None
     date_to = date.fromisoformat(date_to_str) if date_to_str else None
@@ -71,18 +77,20 @@ def export_csv():
         date_from=date_from,
         date_to=date_to,
         strategy_name=strategy_filter or None,
+        ticker=ticker_filter or None,
     )
 
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow([
-        "ID", "Стратегия", "Дата открытия", "Дата закрытия", "Направление",
+        "ID", "Тикер", "Стратегия", "Дата открытия", "Дата закрытия", "Направление",
         "Цена входа", "Цена выхода", "Лотов", "P&L руб",
         "Комиссия руб", "Время удержания (сек)", "Причина выхода",
     ])
     for t in trades:
         writer.writerow([
             t.id,
+            t.instrument.ticker if t.instrument else "",
             t.strategy_name or "combo",
             t.open_at.strftime("%Y-%m-%d %H:%M:%S") if t.open_at else "",
             t.close_at.strftime("%Y-%m-%d %H:%M:%S") if t.close_at else "",

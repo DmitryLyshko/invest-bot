@@ -9,7 +9,7 @@ from datetime import date, datetime, timedelta
 from typing import Generator, List, Optional
 
 from sqlalchemy import create_engine, func, select, text, union
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import Session, joinedload, sessionmaker
 
 from trading_bot.config import settings
 from trading_bot.db.models import (
@@ -289,9 +289,12 @@ def get_trades_page(
     date_from: Optional[date] = None,
     date_to: Optional[date] = None,
     strategy_name: Optional[str] = None,
+    ticker: Optional[str] = None,
 ) -> tuple[List[Trade], int]:
     with get_session() as session:
-        q = session.query(Trade)
+        q = session.query(Trade).options(joinedload(Trade.instrument))
+        if ticker:
+            q = q.join(Trade.instrument).filter(Instrument.ticker == ticker)
         if direction:
             q = q.filter(Trade.direction == direction)
         if exit_reason:
@@ -304,6 +307,7 @@ def get_trades_page(
             q = q.filter(Trade.strategy_name == strategy_name)
         total = q.count()
         trades = q.order_by(Trade.close_at.desc()).offset((page - 1) * per_page).limit(per_page).all()
+        session.expunge_all()
         return trades, total
 
 
@@ -313,9 +317,12 @@ def get_all_trades_for_export(
     date_from: Optional[date] = None,
     date_to: Optional[date] = None,
     strategy_name: Optional[str] = None,
+    ticker: Optional[str] = None,
 ) -> List[Trade]:
     with get_session() as session:
-        q = session.query(Trade)
+        q = session.query(Trade).options(joinedload(Trade.instrument))
+        if ticker:
+            q = q.join(Trade.instrument).filter(Instrument.ticker == ticker)
         if direction:
             q = q.filter(Trade.direction == direction)
         if exit_reason:
@@ -326,7 +333,9 @@ def get_all_trades_for_export(
             q = q.filter(Trade.open_at < date_to + timedelta(days=1))
         if strategy_name:
             q = q.filter(Trade.strategy_name == strategy_name)
-        return q.order_by(Trade.close_at.desc()).all()
+        trades = q.order_by(Trade.close_at.desc()).all()
+        session.expunge_all()
+        return trades
 
 
 def get_strategy_pnl_summary() -> List[dict]:
