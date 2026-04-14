@@ -20,8 +20,9 @@ invest-bot/
 │   │   └── telegram_notifier.py
 │   ├── web/              # Flask дашборд
 │   └── main.py           # Точка входа
-├── migrate_to_clickhouse.py  # Разовый скрипт миграции MySQL → ClickHouse
-├── fetch_instruments.py      # Утилита: получить figi/instrument_id из T-Invest API
+├── migrate_to_clickhouse.py      # Разовый скрипт миграции MySQL → ClickHouse
+├── fetch_instruments.py          # Утилита: получить figi/instrument_id из T-Invest API
+├── calibrate_multipliers.py      # Ежедневная авто-калибровка print_multiplier (cron 01:00)
 ├── requirements.txt
 ├── .env.example
 ├── README.md
@@ -118,7 +119,7 @@ SBER:
   ofi_smooth_window: 12       # окно сглаживания OFI (апдейтов стакана)
   ofi_exit_threshold: 0.5     # порог OFI для выхода (независимо от порога входа)
   min_ofi_confirmations: 4    # подтверждений подряд для выхода по OFI
-  print_multiplier: 50.0      # объём >= медиана * multiplier → крупный принт
+  print_multiplier: 50.0      # объём >= медиана * multiplier → крупный принт; авто-калибруется ежедневно (calibrate_multipliers.py): target ~p97 = (p95/median + p99/median) / 2, clamp [10, 200], порог обновления 20%
   print_window: 200           # размер окна медианы объёмов
   print_max_age_seconds: 15   # принт старше этого — не считается (15с для ликвидных, 25-30с для неликвидных)
 
@@ -584,6 +585,7 @@ stop_event.wait()
 | Маркет-дата токен | `TINKOFF_MARKET_TOKEN` | fallback на `TINKOFF_TOKEN` если не задан |
 | Хранение маркет-данных | ClickHouse если `CLICKHOUSE_HOST` задан | иначе MySQL; буфер 1000 строк / 5 сек |
 | Миграция MySQL → CH | `python migrate_to_clickhouse.py` | сначала `--dry-run`; удаляет из MySQL после успешной вставки |
+| Калибровка multiplier | `python calibrate_multipliers.py` | cron 01:00 ежедневно; обновляет `print_multiplier` в `instruments.yaml` на основе CH за 10 дней; бот рестартует в 01:05 через `systemctl restart trading-bot` |
 | Мультитикер | реализован | все тикеры из `instruments.yaml`, каждый в своём потоке |
 | Глобальный лимит позиций | `MAX_GLOBAL_POSITIONS` в `.env` (дефолт 3) | `PortfolioManager.can_open()` → блокирует в `PositionManager.on_signal` |
 | Размер позиции от портфеля | `MAX_POSITION_PCT` в `.env` (дефолт 0.30) | `PortfolioManager.compute_lots()`: 30% депо / (цена × lot_size); cap = `max_position_lots` |
