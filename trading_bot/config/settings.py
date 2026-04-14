@@ -25,6 +25,12 @@ WEB_USERNAME: str = os.environ.get("WEB_USERNAME", "admin")
 WEB_PASSWORD: str = os.environ["WEB_PASSWORD"]
 WEB_HOST: str = os.environ.get("WEB_HOST", "127.0.0.1")
 WEB_PORT: int = int(os.environ.get("WEB_PORT", "5000"))
+# Белый список IP через запятую. Если пусто — доступ разрешён всем.
+WEB_ALLOWED_IPS: list[str] = [
+    ip.strip()
+    for ip in os.environ.get("WEB_ALLOWED_IPS", "").split(",")
+    if ip.strip()
+]
 
 # ─── Риск-менеджмент ──────────────────────────────────────────────────────────
 # Дневной лимит убытков в % от счёта (0.01 = 1%). При достижении торговля блокируется.

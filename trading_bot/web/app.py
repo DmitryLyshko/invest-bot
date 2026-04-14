@@ -4,7 +4,7 @@ Flask приложение — веб-дашборд торгового бота
 import logging
 from typing import Optional
 
-from flask import Flask, redirect, render_template, request, url_for
+from flask import Flask, abort, redirect, render_template, request, url_for
 from flask_login import LoginManager, login_required, login_user, logout_user
 
 from trading_bot.config import settings
@@ -39,6 +39,15 @@ def set_portfolio_manager(pm) -> None:
 def create_app() -> Flask:
     app = Flask(__name__, template_folder="templates", static_folder="static")
     app.secret_key = settings.WEB_SECRET_KEY
+
+    # ── IP whitelist ──────────────────────────────────────────────────────────
+    if settings.WEB_ALLOWED_IPS:
+        @app.before_request
+        def check_ip():
+            remote_ip = request.remote_addr
+            if remote_ip not in settings.WEB_ALLOWED_IPS:
+                logger.warning("Blocked request from %s (not in WEB_ALLOWED_IPS)", remote_ip)
+                abort(403)
 
     # ── Flask-Login ────────────────────────────────────────────────────────────
     login_manager = LoginManager()
@@ -84,6 +93,10 @@ def create_app() -> Flask:
     app.register_blueprint(instruments_bp)
 
     # ── Error handlers ─────────────────────────────────────────────────────────
+    @app.errorhandler(403)
+    def forbidden(e):
+        return render_template("error.html", code=403, message="Доступ запрещён"), 403
+
     @app.errorhandler(404)
     def not_found(e):
         return render_template("error.html", code=404, message="Страница не найдена"), 404
