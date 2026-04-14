@@ -12,11 +12,16 @@ invest-bot/
 ├── trading_bot/          # Основной пакет
 │   ├── config/           # Настройки и конфиг инструментов
 │   ├── core/             # Бизнес-логика (стратегия, исполнение, данные, риск)
-│   ├── db/               # Модели и репозиторий
+│   ├── db/               # MySQL-модели, репозиторий, ClickHouse-клиент
+│   │   ├── models.py
+│   │   ├── repository.py
+│   │   └── clickhouse.py
 │   ├── notifications/    # Telegram-уведомления
 │   │   └── telegram_notifier.py
 │   ├── web/              # Flask дашборд
 │   └── main.py           # Точка входа
+├── migrate_to_clickhouse.py  # Разовый скрипт миграции MySQL → ClickHouse
+├── fetch_instruments.py      # Утилита: получить figi/instrument_id из T-Invest API
 ├── requirements.txt
 ├── .env.example
 ├── README.md
@@ -32,6 +37,9 @@ T-Invest WebSocket (TINKOFF_MARKET_TOKEN)
   └─▶ StreamHandler._run_stream()
         ├─▶ normalize_orderbook() / normalize_trade()   [market_data.py]
         ├─▶ DataRecorder.on_orderbook() / on_trade()    [опционально, RECORD_MARKET_DATA]
+        │     └─▶ repository.save_orderbook_snapshot / save_trade_tick
+        │           └─▶ ClickHouseWriter (если CLICKHOUSE_HOST задан)
+        │               или MarketOrderbook/MarketTradeTick в MySQL (fallback)
         ├─▶ ComboStrategy.on_orderbook()
         │     ├─▶ OFICalculator.update(bids, asks) → float [-1..1]  (со сглаживанием)
         │     ├─▶ PrintDetector.update_quotes(bid, ask)
@@ -44,21 +52,24 @@ T-Invest WebSocket (TINKOFF_MARKET_TOKEN)
                     ├─▶ RiskManager.check_all()   # блокирует → RiskCheckFailed
                     ├─▶ repository.save_signal()
                     └─▶ _open_position() / _close_position()
-                          └─▶ OrderManager.place_market_order()
-                                └─▶ T-Invest orders.post_order() / sandbox.post_sandbox_order()
-                                └─▶ repository.save_order / update_order_status / save_trade
+                          ├─▶ OrderManager.place_market_order()
+                          │     └─▶ T-Invest orders.post_order() / sandbox.post_sandbox_order()
+                          │     └─▶ repository.save_order / update_order_status / save_trade
+                          └─▶ TelegramNotifier.send_position_opened/closed()
 
 PositionManager.update_market_price(price)   # вызывается при каждой сделке из стрима
   └─▶ _check_stop_loss(price)
-        ├─▶ breakeven: если gain >= breakeven_ticks → активировать stop_at_breakeven
+        ├─▶ трейлинг-стоп: peak_price обновляется; стоп = max(initial, peak - trail_distance)
+        ├─▶ безубыток: если gain >= breakeven_ticks → stop_at_breakeven = True
         ├─▶ стоп-лосс: loss >= stop_ticks (или цена вернулась за вход при безубытке)
         └─▶ тейк-профит: gain >= take_profit_ticks (если take_profit_ticks > 0)
 ```
 
 Фоновые потоки в `main.py`:
-- `stream_thread` (daemon) — стрим рыночных данных
+- `stream_thread` (daemon) — стрим рыночных данных, по одному на тикер
 - `web_thread` (daemon) — Flask дашборд
-- `APScheduler` — `position_manager.check_timeout()` каждую минуту + `portfolio_manager.refresh()` каждую минуту
+- `ch_flush` (daemon) — сброс буферов ClickHouse каждые 5 секунд
+- `APScheduler` — `position_manager.check_timeout()` + `portfolio_manager.refresh()` каждую минуту; cron 10:05 МСК (пн-пт) → Telegram-уведомление о начале торгов
 
 **Мультитикер:** каждый тикер из `instruments.yaml` получает свой поток `stream_thread`, свои `strategy/order_manager/position_manager`, свой job в планировщике. Все изолированы — падение одного не влияет на другие.
 
@@ -76,16 +87,21 @@ WEB_SECRET_KEY: str
 WEB_USERNAME: str / WEB_PASSWORD: str
 WEB_HOST: str                          # default "127.0.0.1"
 WEB_PORT: int                          # default 5000
-DAILY_LOSS_LIMIT_PCT: float            # default 0.01 — лимит убытка в % от счёта (1%); если счёт не загружен — fallback на RUB
-DAILY_LOSS_LIMIT_RUB: float            # default -500.0 — fallback лимит в рублях
+DAILY_LOSS_LIMIT_PCT: float            # default 0.01 — лимит убытка в % от счёта (1%)
+DAILY_LOSS_LIMIT_RUB: float            # default -500.0 — fallback если портфель не загружен
 MAX_GLOBAL_POSITIONS: int              # default 3 — макс. одновременных позиций по всем тикерам
 MAX_POSITION_PCT: float                # default 0.30 — доля портфеля на одну сделку (30%)
 USE_SANDBOX: bool                      # SANDBOX=true в .env
 LOG_DIR / LOG_FILE / LOG_LEVEL
 INSTRUMENTS_CONFIG_PATH                # → trading_bot/config/instruments.yaml
-TELEGRAM_BOT_TOKEN: str               # токен Telegram-бота (опционально; без токена — no-op)
+TELEGRAM_BOT_TOKEN: str                # токен Telegram-бота (опционально; без токена — no-op)
 TELEGRAM_CHAT_ID: str                  # ID чата для уведомлений
-RECORD_MARKET_DATA: bool               # писать стаканы/тики в БД для бэктеста
+CLICKHOUSE_HOST: str                   # "" = ClickHouse отключён, писать в MySQL
+CLICKHOUSE_PORT: int                   # default 8123
+CLICKHOUSE_USER: str                   # default "default"
+CLICKHOUSE_PASSWORD: str               # default ""
+CLICKHOUSE_DATABASE: str               # default "trading_bot"
+RECORD_MARKET_DATA: bool               # писать стаканы/тики для бэктеста
 RECORD_ORDERBOOK_INTERVAL: int         # каждый N-й снапшот стакана (default 1)
 ```
 
@@ -102,7 +118,7 @@ SBER:
   ofi_smooth_window: 12       # окно сглаживания OFI (апдейтов стакана)
   ofi_exit_threshold: 0.5     # порог OFI для выхода (независимо от порога входа)
   min_ofi_confirmations: 4    # подтверждений подряд для выхода по OFI
-  print_multiplier: 10.0      # объём >= медиана * multiplier → крупный принт
+  print_multiplier: 50.0      # объём >= медиана * multiplier → крупный принт
   print_window: 200           # размер окна медианы объёмов
 
   # Cooldown
@@ -123,12 +139,16 @@ SBER:
   stop_ticks: 40
   breakeven_ticks: 35         # перенести стоп в безубыток после N тиков в плюс (только если trailing_stop_ticks=0)
   take_profit_ticks: 120      # 0 = отключён
-  trailing_stop_ticks: 30     # трейлинг-стоп: отстаёт от пика на N тиков; 0 = откл (используется фикс. стоп+безубыток)
+  trailing_stop_ticks: 30     # трейлинг-стоп: отстаёт от пика на N тиков; 0 = откл
 
   trading_hours: {start: "10:05", end: "18:30"}
   skip_first_minutes: 5
 ```
 Добавить тикер = добавить секцию сюда + перезапустить (в БД попадёт автоматически).
+Новые тикеры (instrument_id неизвестен) → запустить `python fetch_instruments.py`.
+
+Тикеры в yaml (20 штук): SBER, GMKN, VTBR, LKOH, GAZP, NVTK, ROSN, TATN, YNDX, PLZL,
+CHMF, NLMK, MAGN, ALRS, MTSS, SIBN, AFLT, MGNT, MOEX, PHOR.
 
 ---
 
@@ -190,7 +210,7 @@ class ComboStrategy(BaseStrategy):
     # property: current_ofi
 ```
 **Вход:** `|OFI| >= ofi_threshold` на `min_ofi_entry_confirmations` подряд + принт той же стороны + свежесть принта ≤ **15с** + cooldown + фильтр тренда.
-**Фильтр тренда:** если `trend_ma_window > 0` — LONG разрешён только при `mid > MA(N)`, SHORT — при `mid < MA(N)`. Окно накапливает mid-цены из стакана; до заполнения входы блокируются. `0` = отключён.
+**Фильтр тренда:** если `trend_ma_window > 0` — LONG разрешён только при `mid > MA(N)`, SHORT — при `mid < MA(N)`. До заполнения окна входы блокируются. `0` = отключён.
 **Подтверждения входа:** `_ofi_entry_confirmations` — счётчик последовательных OFI-чтений в одном направлении. При смене направления сбрасывается. Сигнал только при `count >= min_ofi_entry_confirmations`.
 **Выход:** OFI против позиции на `min_ofi_confirmations` подтверждений подряд, `|OFI| >= ofi_exit_threshold`.
 **Защита от преждевременного закрытия:**
@@ -235,7 +255,6 @@ class PortfolioManager:
 Внутри `refresh()` два вызова API: `get_sandbox_portfolio` / `get_portfolio` (баланс) + `get_last_prices(figi=[...])` (цены всех инструментов).
 `compute_lots` — приоритет цены: 1) `stream_price` из стрима (свежее); 2) `_last_prices[figi]` из API refresh; 3) fallback `max_lots_cap` или 1 с WARNING.
 Формула: `floor(portfolio * max_position_pct / (price * lot_size))`, min=1, cap=`max_position_lots` из конфига.
-Параметры берутся из `.env`: `MAX_GLOBAL_POSITIONS` (дефолт 3), `MAX_POSITION_PCT` (дефолт 0.30).
 
 ### `position_manager.py`
 ```python
@@ -246,9 +265,10 @@ class PortfolioManager:
     # computed: unrealized_pnl, hold_seconds
 
 class PositionManager:
-    __init__(instrument_id, instrument_config, order_manager, strategy, portfolio_manager=None)
+    __init__(instrument_id, instrument_config, order_manager, strategy,
+             portfolio_manager=None, ticker="", notifier=None)
     on_signal(signal: Signal)           # главная точка входа
-    update_market_price(price: float)   # вызывать при каждой сделке → проверяет стоп/тейк; запоминает _last_price
+    update_market_price(price: float)   # вызывать при каждой сделке → проверяет стоп/тейк
     check_timeout()                     # вызывать из планировщика каждую минуту
     get_position_summary() → dict | None
     # properties: open_position, has_position
@@ -259,9 +279,9 @@ class PositionManager:
 **Трейлинг-стоп:** если `trailing_stop_ticks > 0` — стоп следует за ценовым пиком на расстоянии `trailing_stop_ticks * tick_size`. Начальная защита = `stop_ticks` до тех пор, пока трейлинг не обгонит её. `peak_price` обновляется в `OpenPosition` при каждом `update_market_price`. Закрытие с `exit_reason="trailing_stop"`.
 **Безубыток:** используется только если `trailing_stop_ticks=0`. После движения на `breakeven_ticks` в плюс стоп переносится на цену входа (`stop_at_breakeven = True`). При возврате за вход — `exit_reason="breakeven_stop"`.
 **Тейк-профит:** если `take_profit_ticks > 0` и движение в плюс достигло порога — закрытие с `exit_reason="take_profit"`.
-**Глобальный лимит позиций:** в `on_signal` перед открытием проверяется `portfolio_manager.can_open()`. При достижении лимита сигнал блокируется с WARNING (без записи в signals).
-**Размер лота:** при открытии вычисляется через `portfolio_manager.compute_lots(_last_price, lot_size, max_position_lots)`. `max_position_lots` из конфига — жёсткий потолок.
-**Регистрация:** `register_opened` вызывается после успешного открытия, `register_closed` — после закрытия.
+**Глобальный лимит позиций:** в `on_signal` перед открытием проверяется `portfolio_manager.can_open()`. При достижении лимита сигнал блокируется с WARNING.
+**Размер лота:** при открытии вычисляется через `portfolio_manager.compute_lots(_last_price, lot_size, max_position_lots)`.
+**Уведомления:** `TelegramNotifier.send_position_opened()` после открытия, `send_position_closed()` после закрытия.
 
 ---
 
@@ -278,7 +298,8 @@ class RiskManager:
     _deny(reason, message)   # логирует в БД + бросает RiskCheckFailed
 ```
 Порядок проверок: bot_active → trading_hours → пирамидинг → дневной лимит убытков.
-Дневной лимит: `portfolio_value * DAILY_LOSS_LIMIT_PCT` (1% от счёта); fallback на `DAILY_LOSS_LIMIT_RUB` если портфель не загружен.
+**Дневной лимит:** `portfolio_value * DAILY_LOSS_LIMIT_PCT` (1% от счёта по умолчанию).
+Fallback на `DAILY_LOSS_LIMIT_RUB` если `portfolio_manager` не передан или портфель не загружен.
 
 ---
 
@@ -310,28 +331,52 @@ class DataRecorder:
     on_orderbook(data: dict) → None   # запись стакана; каждый N-й (RECORD_ORDERBOOK_INTERVAL)
     on_trade(data: dict) → None       # запись тикового трейда
 ```
-Подключается к тем же колбэкам что и стратегия — параллельно, без вмешательства.
-При `RECORD_MARKET_DATA=false` — no-op. Запись ведётся только в `trading_hours` (MSK) из конфига инструмента; если часы не заданы — пишет всегда. SBER генерирует ~150-300k строк стакана/день в торговое время.
+Вызывает `repository.save_orderbook_snapshot` / `save_trade_tick`, которые сами решают куда писать (ClickHouse или MySQL).
+При `RECORD_MARKET_DATA=false` — no-op. Запись только в `trading_hours` (MSK).
 
 ---
 
 ## db/
 
-### `models.py` — таблицы SQLAlchemy
+### `models.py` — таблицы SQLAlchemy (MySQL)
 
 | Таблица | Ключевые поля |
 |---|---|
-| `instruments` | ticker, figi, is_active, все параметры стратегии (включая ofi_smooth_window, min_hold_seconds, ofi_exit_threshold, min_ofi_confirmations) |
+| `instruments` | ticker, figi, is_active, все параметры стратегии |
 | `signals` | instrument_id, signal_type(long/short/exit), ofi_value, print_volume, print_side, reason, acted_on |
-| `orders` | instrument_id, signal_id, order_id_broker, direction, quantity, price_executed, status(new/pending/filled/cancelled/rejected), commission_rub |
+| `orders` | instrument_id, signal_id, order_id_broker, direction, quantity, price_executed, status, commission_rub |
 | `trades` | open/close_order_id, direction, open/close_price, pnl_rub, commission_rub, open/close_at, hold_seconds, exit_reason |
 | `bot_logs` | level(INFO/WARNING/ERROR), component, message |
 | `users` | username, password_hash, is_active, last_login |
 | `bot_state` | id=1 (singleton), bot_active |
-| `market_orderbooks` | figi, bids(JSON), asks(JSON), recorded_at — индекс по (figi, recorded_at) |
-| `market_trade_ticks` | figi, price, quantity, direction, recorded_at — индекс по (figi, recorded_at) |
+| `market_orderbooks` | figi, bids(JSON), asks(JSON), recorded_at — **только если CLICKHOUSE_HOST не задан** |
+| `market_trade_ticks` | figi, price, quantity, direction, recorded_at — **только если CLICKHOUSE_HOST не задан** |
 
 `exit_reason` значения в `trades`: `ofi_reversed`, `timeout`, `stop_loss`, `breakeven_stop`, `take_profit`, `trailing_stop`, `manual`.
+
+### `clickhouse.py` — хранение маркет-данных
+
+```python
+class ClickHouseWriter:
+    # Singleton. Буферизует строки и пишет батчами каждые 5 сек или при 1000 строках.
+    insert_orderbook(figi, bids, asks, timestamp)
+    insert_trade_tick(figi, price, quantity, direction, timestamp)
+    flush()   # принудительный сброс буферов (вызывается atexit)
+    query_orderbooks(figi, date_from, date_to) → list of (ts, bids, asks)
+    iter_orderbooks(figi, date_from, date_to, chunk_size) → Generator
+    query_trade_ticks(figi, date_from, date_to) → list of (ts, price, qty, dir)
+    iter_trade_ticks(figi, date_from, date_to, chunk_size) → Generator
+    query_recorded_dates(figi) → List[str]
+    count_orderbooks(figi=None) → int
+    count_trade_ticks(figi=None) → int
+
+is_enabled() → bool          # True если CLICKHOUSE_HOST задан
+get_writer() → ClickHouseWriter   # singleton
+init_clickhouse()             # вызывается из main.py при старте
+```
+
+ClickHouse таблицы: `market_orderbooks`, `market_trade_ticks`.
+Движок: `MergeTree`, партиционирование по месяцу (`toYYYYMM(recorded_at)`), сортировка по `(figi, recorded_at)`.
 
 ### `repository.py` — все функции
 
@@ -369,9 +414,14 @@ get_pnl_by_hour(instrument_id=None) → List[{hour, pnl, count}]
 get_pnl_by_weekday(instrument_id=None) → List[{dow, pnl, count}]
 # instrument_id=None → все тикеры; передать int → фильтр по инструменту
 
-# Market data (бэктест)
+# Market data (бэктест) — автоматически выбирают ClickHouse или MySQL
 save_orderbook_snapshot(figi, bids, asks, timestamp)
 save_trade_tick(figi, price, quantity, direction, timestamp)
+get_orderbook_snapshots(figi, date_from, date_to) → list
+iter_orderbook_snapshots(figi, date_from, date_to, chunk_size) → Generator[(ts, bids, asks)]
+get_trade_ticks(figi, date_from, date_to) → list
+iter_trade_ticks(figi, date_from, date_to, chunk_size) → Generator[(ts, price, qty, dir)]
+get_recorded_dates(figi) → List[str]
 
 # Logs
 log_event(level, component, message)
@@ -389,14 +439,31 @@ update_last_login(user_id)
 
 ---
 
+## notifications/
+
+### `telegram_notifier.py`
+```python
+class TelegramNotifier:
+    __init__(token: str, chat_id: str)
+    send_bot_started(tickers, sandbox)          # при запуске бота
+    send_trading_day_started(tickers)           # 10:05 МСК пн-пт (APScheduler cron)
+    send_position_opened(ticker, direction, entry_price, quantity_lots, lot_size)
+    send_position_closed(ticker, direction, entry_price, close_price,
+                         quantity_lots, lot_size, pnl, hold_seconds, exit_reason)
+```
+Все `send_*` неблокирующие — отправка в фоновом daemon-потоке.
+Если `TELEGRAM_BOT_TOKEN` или `TELEGRAM_CHAT_ID` не заданы — все методы no-op.
+
+---
+
 ## web/
 
 ### `app.py`
 ```python
 create_app() → Flask   # регистрирует blueprints + Flask-Login
-get_position_managers() → dict[ticker, PositionManager]   # инжекция из main.py
+get_position_managers() → dict[ticker, PositionManager]
 set_position_managers(pms: dict) → None
-get_portfolio_manager() → PortfolioManager | None          # инжекция из main.py
+get_portfolio_manager() → PortfolioManager | None
 set_portfolio_manager(pm) → None
 ```
 Blueprints: `dashboard`, `trades`, `signals`, `stats`, `instruments`.
@@ -464,25 +531,31 @@ Chart.js подключается через CDN (`cdn.jsdelivr.net/npm/chart.js
 ```python
 setup_logging()              # RotatingFileHandler(logs/bot.log) + stdout
 repository.init_db()         # CREATE TABLE + BotState singleton
+init_clickhouse()            # подключить ClickHouse если CLICKHOUSE_HOST задан (no-op иначе)
 ensure_default_user(...)     # создать admin если нет
 config = load_instruments_config()      # читает instruments.yaml
 instruments = sync_instruments_to_db()  # upsert в таблицу instruments
 account_id = get_first_account_id()     # SandboxClient или Client
+notifier = TelegramNotifier(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID)
 portfolio_manager = PortfolioManager(account_id, MAX_GLOBAL_POSITIONS, MAX_POSITION_PCT)
 portfolio_manager.refresh()             # загрузить баланс сразу при старте
-for ticker, params in instruments.items():   # все тикеры из yaml
-    strategy, order_manager, position_manager = build_components(ticker, params, account_id, portfolio_manager)
+for ticker, params in instruments.items():
+    strategy, order_manager, position_manager = build_components(
+        ticker, params, account_id, portfolio_manager, notifier)
     recorder = DataRecorder(figi=params["figi"])
     on_orderbook, on_trade = make_event_handlers(strategy, position_manager, recorder)
     stream = StreamHandler(figi, on_orderbook, on_trade, instrument_id=params["instrument_id"])
     threading.Thread(target=stream.start, daemon=True, name=f"stream_{ticker}").start()
-    scheduler.add_job(position_manager.check_timeout, "interval", minutes=1, id=f"timeout_check_{ticker}")
+    scheduler.add_job(position_manager.check_timeout, "interval", minutes=1)
 scheduler.add_job(portfolio_manager.refresh, "interval", minutes=1, id="portfolio_refresh")
+scheduler.add_job(notifier.send_trading_day_started, "cron",
+                  day_of_week="mon-fri", hour=7, minute=5, id="trading_day_start_notify")
 scheduler.start()
-flask_app = create_app(); set_position_managers({ticker: position_manager, ...}); set_portfolio_manager(portfolio_manager)
+notifier.send_bot_started(tickers, sandbox)
+flask_app = create_app(); set_position_managers(...); set_portfolio_manager(portfolio_manager)
 web_thread.start()
-signal.signal(SIGINT/SIGTERM, shutdown)   # graceful stop: stop all streams + set stop_event
-stop_event.wait()      # main thread blocks here
+signal.signal(SIGINT/SIGTERM, shutdown)   # graceful stop: stop streams + flush CH
+stop_event.wait()
 ```
 
 ---
@@ -492,21 +565,23 @@ stop_event.wait()      # main thread blocks here
 | Что | Где | Детали |
 |---|---|---|
 | Конфиг → код | всегда через `instrument_config` dict | никаких глобалов в стратегиях |
-| Добавить тикер | только `instruments.yaml` | код не трогать |
-| Часовой пояс | UTC везде в БД | MSK = UTC+3, конвертация в `combo_strategy._is_trading_hours` и `risk_manager._check_trading_hours` |
+| Добавить тикер | только `instruments.yaml` | код не трогать; новые instrument_id брать из `fetch_instruments.py` |
+| Часовой пояс | UTC везде в БД | MSK = UTC+3, конвертация в `combo_strategy` и `risk_manager` |
 | Порог выхода | `ofi_exit_threshold` из конфига | дефолт = `ofi_threshold * 0.5` (обратная совместимость) |
 | Принт "свежесть" | ≤ **15 секунд** | в `combo_strategy._check_entry_condition` |
 | Идемпотентность ордеров | `uuid4()` как `client_order_id` | `orders` запись создаётся ДО вызова API |
 | Только одна позиция | контролируется `RiskManager._check_no_pyramiding` | |
 | bot_active флаг | `bot_state.bot_active` в БД | переключается через `POST /api/bot/toggle` |
-| Дневной лимит убытков | `DAILY_LOSS_LIMIT_RUB` из `.env` | `repository.get_today_pnl()` |
+| Дневной лимит убытков | `DAILY_LOSS_LIMIT_PCT=0.01` (1% от счёта) | fallback `DAILY_LOSS_LIMIT_RUB=-500` если портфель не загружен |
 | Безубыток | `breakeven_ticks` в конфиге | флаг `stop_at_breakeven` в `OpenPosition`; игнорируется если `trailing_stop_ticks > 0` |
 | Тейк-профит | `take_profit_ticks` в конфиге | 0 = отключён |
 | Трейлинг-стоп | `trailing_stop_ticks` в конфиге | 0 = отключён; `peak_price` в `OpenPosition` |
 | Подтверждения входа | `min_ofi_entry_confirmations` в конфиге | N последовательных OFI ≥ threshold |
 | Маркет-дата токен | `TINKOFF_MARKET_TOKEN` | fallback на `TINKOFF_TOKEN` если не задан |
-| Запись данных для бэктеста | `RECORD_MARKET_DATA=true` в `.env` | `DataRecorder` → таблицы `market_orderbooks`, `market_trade_ticks` |
+| Хранение маркет-данных | ClickHouse если `CLICKHOUSE_HOST` задан | иначе MySQL; буфер 1000 строк / 5 сек |
+| Миграция MySQL → CH | `python migrate_to_clickhouse.py` | сначала `--dry-run`; удаляет из MySQL после успешной вставки |
 | Мультитикер | реализован | все тикеры из `instruments.yaml`, каждый в своём потоке |
 | Глобальный лимит позиций | `MAX_GLOBAL_POSITIONS` в `.env` (дефолт 3) | `PortfolioManager.can_open()` → блокирует в `PositionManager.on_signal` |
 | Размер позиции от портфеля | `MAX_POSITION_PCT` в `.env` (дефолт 0.30) | `PortfolioManager.compute_lots()`: 30% депо / (цена × lot_size); cap = `max_position_lots` |
-| Баланс счёта | `GET /api/account` | `PortfolioManager.refresh()` каждую минуту; в дашборде карточка «Счёт / Позиции» |
+| Баланс счёта | `GET /api/account` | `PortfolioManager.refresh()` каждую минуту |
+| Telegram уведомления | `TelegramNotifier` | запуск бота, начало торгов (10:05 МСК), открытие/закрытие позиции |
