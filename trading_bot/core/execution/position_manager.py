@@ -576,6 +576,114 @@ class PositionManager:
                 )
                 self._close_position(tp_signal, db_signal.id, exit_reason="take_profit")
 
+    def recover_position(self, figi: str) -> bool:
+        """
+        Восстановить открытую позицию после рестарта бота.
+
+        Алгоритм:
+        1. Запрашивает T-Invest API: есть ли позиция по FIGI
+        2. Ищет в БД последний unmatched filled ордер совпадающего направления
+        3. Восстанавливает self._position, синхронизирует стратегию и портфель
+        """
+        try:
+            from tinkoff.invest import Client
+            from tinkoff.invest.sandbox.client import SandboxClient
+            from tinkoff.invest.utils import quotation_to_decimal
+            from trading_bot.config import settings
+
+            if settings.USE_SANDBOX:
+                with SandboxClient(settings.TINKOFF_TOKEN) as client:
+                    resp = client.sandbox.get_sandbox_portfolio(
+                        account_id=self.order_manager.account_id
+                    )
+            else:
+                with Client(settings.TINKOFF_TOKEN) as client:
+                    resp = client.operations.get_portfolio(
+                        account_id=self.order_manager.account_id
+                    )
+
+            qty_lots = 0
+            avg_price = 0.0
+            for api_pos in resp.positions:
+                if api_pos.figi == figi:
+                    qty_lots = int(float(quotation_to_decimal(api_pos.quantity_lots)))
+                    avg_price = (
+                        api_pos.average_position_price.units
+                        + api_pos.average_position_price.nano / 1e9
+                    )
+                    break
+
+            if qty_lots == 0:
+                logger.debug(
+                    f"[{self.ticker}/{self.strategy_name}] Нет открытой позиции — восстановление не нужно"
+                )
+                return False
+
+            direction = "long" if qty_lots > 0 else "short"
+            order_direction = "buy" if direction == "long" else "sell"
+
+            last_order = repository.get_last_unmatched_order(self.instrument_id, order_direction)
+
+            if last_order is None:
+                logger.warning(
+                    f"[{self.ticker}/{self.strategy_name}] Позиция в портфеле ({qty_lots} лотов), "
+                    f"но ордер в БД не найден. Требуется ручное вмешательство."
+                )
+                repository.log_event(
+                    "WARNING", "position_manager",
+                    f"[{self.ticker}] Позиция в портфеле ({figi}, {qty_lots} лотов), "
+                    f"ордер в БД не найден"
+                )
+                return False
+
+            entry_price = last_order.price_executed or avg_price
+
+            self._position = OpenPosition(
+                direction=direction,
+                entry_price=entry_price,
+                quantity_lots=abs(qty_lots),
+                open_at=last_order.created_at,
+                open_order_id=last_order.id,
+                peak_price=entry_price,
+            )
+
+            self.strategy.set_position(direction)
+            if self.portfolio_manager:
+                self.portfolio_manager.register_opened(self.instrument_id)
+
+            logger.info(
+                f"[{self.ticker}/{self.strategy_name}] Позиция восстановлена после рестарта: "
+                f"{direction.upper()} {abs(qty_lots)} лотов @ {entry_price:.2f} "
+                f"(ордер #{last_order.id}, открыта {last_order.created_at.strftime('%H:%M:%S')})"
+            )
+            repository.log_event(
+                "INFO", "position_manager",
+                f"[{self.ticker}/{self.strategy_name}] Позиция восстановлена: "
+                f"{direction.upper()} {abs(qty_lots)} лотов @ {entry_price:.2f}"
+            )
+
+            if self.notifier:
+                self.notifier.send_position_recovered(
+                    ticker=self.ticker,
+                    strategy_name=self.strategy_name,
+                    direction=direction,
+                    entry_price=entry_price,
+                    quantity_lots=abs(qty_lots),
+                    open_at=last_order.created_at,
+                )
+
+            return True
+
+        except Exception as e:
+            logger.error(
+                f"[{self.ticker}/{self.strategy_name}] Ошибка восстановления позиции: {e}"
+            )
+            repository.log_event(
+                "ERROR", "position_manager",
+                f"[{self.ticker}/{self.strategy_name}] Ошибка восстановления позиции: {e}"
+            )
+            return False
+
     @property
     def open_position(self) -> Optional[OpenPosition]:
         """Текущая открытая позиция (или None)."""

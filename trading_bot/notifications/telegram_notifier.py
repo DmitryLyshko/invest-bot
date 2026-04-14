@@ -109,6 +109,27 @@ class TelegramNotifier:
             f"Удержание: {hold_str}"
         )
 
+    def send_position_recovered(
+        self,
+        ticker: str,
+        strategy_name: str,
+        direction: str,
+        entry_price: float,
+        quantity_lots: int,
+        open_at: "datetime",
+    ) -> None:
+        """Уведомление о восстановлении позиции после рестарта."""
+        dir_icon = "🟢 LONG" if direction == "long" else "🔴 SHORT"
+        open_msk = open_at + timedelta(hours=3)
+        self._send(
+            f"⚡ <b>Позиция восстановлена после рестарта</b>\n"
+            f"Тикер: <b>{ticker}</b> [{strategy_name}]\n"
+            f"Направление: {dir_icon}\n"
+            f"Цена входа: {entry_price:.2f} ₽\n"
+            f"Объём: {quantity_lots} лот(ов)\n"
+            f"Открыта: {open_msk.strftime('%H:%M:%S')} МСК"
+        )
+
     # ── Внутренние методы ───────────────────────────────────────────────────────
 
     def _send(self, text: str) -> None:

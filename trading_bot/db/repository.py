@@ -8,7 +8,7 @@ from contextlib import contextmanager
 from datetime import date, datetime, timedelta
 from typing import Generator, List, Optional
 
-from sqlalchemy import create_engine, func, text
+from sqlalchemy import create_engine, func, select, text, union
 from sqlalchemy.orm import Session, sessionmaker
 
 from trading_bot.config import settings
@@ -199,6 +199,30 @@ def update_order_status(
 def get_order_by_broker_id(broker_id: str) -> Optional[Order]:
     with get_session() as session:
         return session.query(Order).filter_by(order_id_broker=broker_id).first()
+
+
+def get_last_unmatched_order(instrument_id: int, direction: str) -> Optional[Order]:
+    """
+    Найти последний filled ордер для инструмента в заданном направлении,
+    не упомянутый ни в одной сделке (ни как open_order_id, ни как close_order_id).
+    Используется при восстановлении позиции после рестарта.
+    """
+    with get_session() as session:
+        matched = union(
+            select(Trade.open_order_id).where(Trade.open_order_id.isnot(None)),
+            select(Trade.close_order_id).where(Trade.close_order_id.isnot(None)),
+        ).scalar_subquery()
+        return (
+            session.query(Order)
+            .filter(
+                Order.instrument_id == instrument_id,
+                Order.direction == direction,
+                Order.status == "filled",
+                Order.id.not_in(matched),
+            )
+            .order_by(Order.created_at.desc())
+            .first()
+        )
 
 
 # ─── Trades ───────────────────────────────────────────────────────────────────

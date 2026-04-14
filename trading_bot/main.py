@@ -306,6 +306,7 @@ def main() -> None:
             id=f"timeout_check_{ticker}",
         )
 
+        position_manager.recover_position(params["figi"])
         position_managers[ticker] = position_manager
         all_streams.append(stream)
 
@@ -359,6 +360,7 @@ def main() -> None:
             id=f"rsi_timeout_check_{ticker}",
         )
 
+        rsi_position_manager.recover_position(params["figi"])
         position_managers[rsi_key] = rsi_position_manager
         all_streams.append(rsi_stream)
 
