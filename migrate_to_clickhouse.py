@@ -31,6 +31,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+from sqlalchemy import text  # noqa: E402
 from trading_bot.config import settings  # noqa: E402  (после load_dotenv)
 
 
@@ -91,7 +92,7 @@ def _ensure_ch_tables(ch) -> None:
 
 
 def _count_mysql(conn, table: str) -> int:
-    result = conn.execute(f"SELECT COUNT(*) FROM {table}")  # noqa: S608
+    result = conn.execute(text(f"SELECT COUNT(*) FROM {table}"))  # noqa: S608
     return result.scalar()
 
 
@@ -123,10 +124,10 @@ def migrate_orderbooks(conn, ch, batch_size: int, dry_run: bool) -> None:
     t0 = time.time()
 
     while True:
-        rows = conn.execute(
-            f"SELECT id, figi, bids, asks, recorded_at "  # noqa: S608
+        rows = conn.execute(text(
+            f"SELECT id, figi, bids, asks, recorded_at "
             f"FROM market_orderbooks ORDER BY id LIMIT {batch_size}"
-        ).fetchall()
+        )).fetchall()
 
         if not rows:
             break
@@ -144,7 +145,7 @@ def migrate_orderbooks(conn, ch, batch_size: int, dry_run: bool) -> None:
                 column_names=["figi", "bids", "asks", "recorded_at"],
             )
             ids_str = ",".join(str(i) for i in ids)
-            conn.execute(f"DELETE FROM market_orderbooks WHERE id IN ({ids_str})")  # noqa: S608
+            conn.execute(text(f"DELETE FROM market_orderbooks WHERE id IN ({ids_str})"))
 
         total_migrated += len(rows)
         elapsed = time.time() - t0
@@ -168,10 +169,10 @@ def migrate_trade_ticks(conn, ch, batch_size: int, dry_run: bool) -> None:
     t0 = time.time()
 
     while True:
-        rows = conn.execute(
-            f"SELECT id, figi, price, quantity, direction, recorded_at "  # noqa: S608
+        rows = conn.execute(text(
+            f"SELECT id, figi, price, quantity, direction, recorded_at "
             f"FROM market_trade_ticks ORDER BY id LIMIT {batch_size}"
-        ).fetchall()
+        )).fetchall()
 
         if not rows:
             break
@@ -189,7 +190,7 @@ def migrate_trade_ticks(conn, ch, batch_size: int, dry_run: bool) -> None:
                 column_names=["figi", "price", "quantity", "direction", "recorded_at"],
             )
             ids_str = ",".join(str(i) for i in ids)
-            conn.execute(f"DELETE FROM market_trade_ticks WHERE id IN ({ids_str})")  # noqa: S608
+            conn.execute(text(f"DELETE FROM market_trade_ticks WHERE id IN ({ids_str})"))
 
         total_migrated += len(rows)
         elapsed = time.time() - t0
