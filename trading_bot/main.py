@@ -30,6 +30,7 @@ from trading_bot.core.execution.portfolio_manager import PortfolioManager
 from trading_bot.core.execution.position_manager import PositionManager
 from trading_bot.core.strategy.combo_strategy import ComboStrategy
 from trading_bot.db import repository
+from trading_bot.db.clickhouse import init_clickhouse
 from trading_bot.notifications.telegram_notifier import TelegramNotifier
 from trading_bot.web.app import create_app, set_portfolio_manager, set_position_managers
 from trading_bot.web.auth import ensure_default_user
@@ -182,6 +183,7 @@ def main() -> None:
     # ── Инициализация БД ──────────────────────────────────────────────────────
     repository.init_db()
     logger.info("БД инициализирована")
+    init_clickhouse()   # no-op если CLICKHOUSE_HOST не задан
 
     # ── Пользователь по умолчанию ─────────────────────────────────────────────
     ensure_default_user(settings.WEB_USERNAME, settings.WEB_PASSWORD)

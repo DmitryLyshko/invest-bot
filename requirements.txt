@@ -21,3 +21,4 @@ PyYAML==6.0.2
 # Utils
 pytz==2024.2
 requests==2.32.3
+clickhouse-connect==0.8.14

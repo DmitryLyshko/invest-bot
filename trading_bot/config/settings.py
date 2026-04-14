@@ -48,6 +48,14 @@ INSTRUMENTS_CONFIG_PATH: Path = BASE_DIR / "trading_bot" / "config" / "instrumen
 # SANDBOX=true — использовать песочницу T-Invest (тестовые ордера)
 USE_SANDBOX: bool = os.environ.get("SANDBOX", "false").lower() == "true"
 
+# ─── ClickHouse (рыночные данные для бэктеста) ────────────────────────────────
+# Если CLICKHOUSE_HOST не задан — DataRecorder пишет в MySQL как раньше.
+CLICKHOUSE_HOST:     str = os.environ.get("CLICKHOUSE_HOST", "")
+CLICKHOUSE_PORT:     int = int(os.environ.get("CLICKHOUSE_PORT", "8123"))
+CLICKHOUSE_USER:     str = os.environ.get("CLICKHOUSE_USER", "default")
+CLICKHOUSE_PASSWORD: str = os.environ.get("CLICKHOUSE_PASSWORD", "")
+CLICKHOUSE_DATABASE: str = os.environ.get("CLICKHOUSE_DATABASE", "trading_bot")
+
 # ─── Telegram уведомления ─────────────────────────────────────────────────────
 # Токен бота (@BotFather) и ID чата (можно узнать через @userinfobot)
 TELEGRAM_BOT_TOKEN: str = os.environ.get("TELEGRAM_BOT_TOKEN", "")

@@ -460,6 +460,10 @@ def update_last_login(user_id: int) -> None:
 
 
 # ─── Market data (backtest recording) ────────────────────────────────────────
+#
+# Запись и чтение маркет-данных:
+#   - если ClickHouse настроен (CLICKHOUSE_HOST задан) — используем CH
+#   - иначе — MySQL (старое поведение, backward-compatible)
 
 def save_orderbook_snapshot(
     figi: str,
@@ -468,6 +472,10 @@ def save_orderbook_snapshot(
     timestamp: datetime,
 ) -> None:
     import json
+    from trading_bot.db.clickhouse import is_enabled as ch_enabled, get_writer
+    if ch_enabled():
+        get_writer().insert_orderbook(figi, bids, asks, timestamp)
+        return
     with get_session() as session:
         row = MarketOrderbook(
             figi=figi,
@@ -486,6 +494,10 @@ def save_trade_tick(
     direction: str,
     timestamp: datetime,
 ) -> None:
+    from trading_bot.db.clickhouse import is_enabled as ch_enabled, get_writer
+    if ch_enabled():
+        get_writer().insert_trade_tick(figi, price, quantity, direction, timestamp)
+        return
     with get_session() as session:
         row = MarketTradeTick(
             figi=figi,
@@ -502,7 +514,10 @@ def get_orderbook_snapshots(
     figi: str,
     date_from: datetime,
     date_to: datetime,
-) -> List[MarketOrderbook]:
+) -> list:
+    from trading_bot.db.clickhouse import is_enabled as ch_enabled, get_writer
+    if ch_enabled():
+        return get_writer().query_orderbooks(figi, date_from, date_to)
     with get_session() as session:
         return (
             session.query(MarketOrderbook)
@@ -522,7 +537,11 @@ def iter_orderbook_snapshots(
     date_to: datetime,
     chunk_size: int = 2000,
 ) -> Generator[tuple, None, None]:
-    """Потоковое чтение стакана — unbuffered cursor, не грузит всё в RAM."""
+    """Потоковое чтение стакана. Источник: ClickHouse или MySQL."""
+    from trading_bot.db.clickhouse import is_enabled as ch_enabled, get_writer
+    if ch_enabled():
+        yield from get_writer().iter_orderbooks(figi, date_from, date_to, chunk_size)
+        return
     with get_session() as session:
         q = (
             session.query(
@@ -547,7 +566,10 @@ def get_trade_ticks(
     figi: str,
     date_from: datetime,
     date_to: datetime,
-) -> List[MarketTradeTick]:
+) -> list:
+    from trading_bot.db.clickhouse import is_enabled as ch_enabled, get_writer
+    if ch_enabled():
+        return get_writer().query_trade_ticks(figi, date_from, date_to)
     with get_session() as session:
         return (
             session.query(MarketTradeTick)
@@ -567,7 +589,11 @@ def iter_trade_ticks(
     date_to: datetime,
     chunk_size: int = 5000,
 ) -> Generator[tuple, None, None]:
-    """Потоковое чтение сделок — unbuffered cursor, не грузит всё в RAM."""
+    """Потоковое чтение тиков. Источник: ClickHouse или MySQL."""
+    from trading_bot.db.clickhouse import is_enabled as ch_enabled, get_writer
+    if ch_enabled():
+        yield from get_writer().iter_trade_ticks(figi, date_from, date_to, chunk_size)
+        return
     with get_session() as session:
         q = (
             session.query(
@@ -590,7 +616,10 @@ def iter_trade_ticks(
 
 
 def get_recorded_dates(figi: str) -> List[str]:
-    """Список дат (UTC), для которых есть данные стакана."""
+    """Список дат, для которых есть данные стакана. Источник: ClickHouse или MySQL."""
+    from trading_bot.db.clickhouse import is_enabled as ch_enabled, get_writer
+    if ch_enabled():
+        return get_writer().query_recorded_dates(figi)
     with get_session() as session:
         rows = (
             session.query(func.date(MarketOrderbook.recorded_at).label("d"))
