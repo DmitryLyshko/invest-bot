@@ -58,13 +58,26 @@
             <canvas id="rsi-chart" style="display: none; width: 100%; height: 100%;"></canvas>
         </div>
 
-        <!-- Таблица сигналов -->
-        <div class="card" style="max-height: 200px; overflow-y: auto;">
+        <!-- Таблица сигналов из графика -->
+        <div class="card" style="max-height: 180px; overflow-y: auto;">
             <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: #718096; margin-bottom: 0.75rem;">
-                Сигналы входа (пересечения OB/OS)
+                Сигналы входа на графике (пересечения OB/OS)
             </div>
             <div id="signals-table-wrap">
                 <span style="color: #718096; font-size: 0.85rem;">—</span>
+            </div>
+        </div>
+
+        <!-- Диагностика из БД -->
+        <div class="card">
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:0.75rem;">
+                <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: #718096;">
+                    Диагностика — данные из БД
+                </div>
+                <button class="btn btn-sm" style="background:#2d3748;color:#a0aec0;" onclick="loadDiag()">Обновить</button>
+            </div>
+            <div id="diag-panel">
+                <span style="color: #718096; font-size: 0.85rem;">Нажмите «Обновить» для загрузки</span>
             </div>
         </div>
     </div>
@@ -328,7 +341,105 @@ function renderSignalsTable(data) {
     </table>`;
 }
 
+function loadDiag() {
+    document.getElementById('diag-panel').innerHTML = '<span style="color:#718096;font-size:0.85rem;">Загрузка...</span>';
+    fetch(`/api/rsi-test/${currentTicker}/diag`)
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                document.getElementById('diag-panel').innerHTML = `<span style="color:#fc8181">${data.error}</span>`;
+                return;
+            }
+            renderDiag(data);
+        })
+        .catch(err => {
+            document.getElementById('diag-panel').innerHTML = `<span style="color:#fc8181">Ошибка: ${err}</span>`;
+        });
+}
+
+function renderDiag(data) {
+    const total = data.total_rsi_signals;
+    const acted = data.acted_count;
+    const blocked = data.blocked_by_reason;
+
+    let html = `<div style="display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:1rem;">`;
+
+    // Карточка: всего сигналов в БД
+    const noSignals = total === 0;
+    html += `<div class="card" style="padding:0.5rem 0.9rem;flex:none;border-color:${noSignals?'#fc8181':'#2d3748'}">
+        <div class="card-title">Сигналов RSI в БД</div>
+        <div style="font-size:1.3rem;font-weight:700;color:${noSignals?'#fc8181':'#fff'}">${total}</div>
+        ${noSignals ? '<div style="font-size:0.7rem;color:#fc8181;">Стратегия не генерирует сигналы!</div>' : ''}
+    </div>`;
+
+    html += `<div class="card" style="padding:0.5rem 0.9rem;flex:none;">
+        <div class="card-title">Исполнено</div>
+        <div style="font-size:1.3rem;font-weight:700;color:${acted>0?'#68d391':'#718096'}">${acted}</div>
+    </div>`;
+
+    html += `<div class="card" style="padding:0.5rem 0.9rem;flex:none;">
+        <div class="card-title">Заблокировано</div>
+        <div style="font-size:1.3rem;font-weight:700;color:${(total-acted)>0?'#f6ad55':'#718096'}">${total - acted}</div>
+    </div>`;
+
+    // Разбивка по причинам блокировки
+    if (Object.keys(blocked).length > 0) {
+        const reasons = Object.entries(blocked).sort((a,b) => b[1]-a[1]);
+        const reasonStr = reasons.map(([r,c]) => `${r}: ${c}`).join('<br>');
+        html += `<div class="card" style="padding:0.5rem 0.9rem;flex:none;">
+            <div class="card-title">Причины блокировок</div>
+            <div style="font-size:0.8rem;color:#f6ad55;line-height:1.6;">${reasonStr}</div>
+        </div>`;
+    }
+
+    html += `</div>`;
+
+    // Последние сигналы из БД
+    if (data.recent_signals.length > 0) {
+        html += `<div style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.05em;color:#718096;margin-bottom:0.5rem;">Последние сигналы RSI в БД</div>`;
+        html += `<div style="overflow-x:auto;max-height:140px;overflow-y:auto;margin-bottom:1rem;"><table>
+            <thead><tr><th>Время</th><th>Тип</th><th>ARSI</th><th>Причина</th><th>Исполнен</th></tr></thead><tbody>`;
+        for (const s of data.recent_signals) {
+            const d = new Date(s.created_at);
+            const ts = d.toLocaleString('ru',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+            const badge = s.type === 'long' ? '<span class="badge badge-long">LONG</span>'
+                        : s.type === 'short' ? '<span class="badge badge-short">SHORT</span>'
+                        : '<span class="badge badge-exit">EXIT</span>';
+            const acted = s.acted_on
+                ? '<span class="badge badge-yes">Да</span>'
+                : '<span class="badge badge-no">Нет</span>';
+            const arsi = s.ofi_value !== null ? s.ofi_value.toFixed(1) : '—';
+            html += `<tr><td style="color:#a0aec0">${ts}</td><td>${badge}</td><td style="color:#4299e1">${arsi}</td><td style="font-size:0.75rem;color:#718096">${s.reason||'—'}</td><td>${acted}</td></tr>`;
+        }
+        html += `</tbody></table></div>`;
+    } else if (total === 0) {
+        html += `<div style="background:#1e1a2a;border:1px solid #fc818155;border-radius:6px;padding:0.75rem 1rem;margin-bottom:1rem;color:#fc8181;font-size:0.85rem;">
+            ⚠ RSI-стратегия для ${data.ticker} не записала ни одного сигнала в БД.<br>
+            Это означает что <code>position_manager.on_signal()</code> ни разу не вызывался.<br>
+            Возможные причины: стратегия не активна в rsi_config.yaml, бот не запускался с RSI для этого тикера,
+            или CandleAggregator не закрывает свечи (нет тиков в стриме).
+        </div>`;
+    }
+
+    // Последние логи
+    if (data.recent_logs.length > 0) {
+        html += `<div style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.05em;color:#718096;margin-bottom:0.5rem;">Последние bot_logs (risk_manager / RSI)</div>`;
+        html += `<div style="overflow-y:auto;max-height:160px;"><table>
+            <thead><tr><th>Время</th><th>Компонент</th><th>Сообщение</th></tr></thead><tbody>`;
+        for (const l of data.recent_logs) {
+            const d = new Date(l.created_at);
+            const ts = d.toLocaleString('ru',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+            const color = l.level === 'ERROR' ? '#fc8181' : l.level === 'WARNING' ? '#f6ad55' : '#a0aec0';
+            html += `<tr><td style="color:#718096;white-space:nowrap">${ts}</td><td style="color:#63b3ed;white-space:nowrap">${l.component}</td><td style="color:${color};font-size:0.78rem">${l.message}</td></tr>`;
+        }
+        html += `</tbody></table></div>`;
+    }
+
+    document.getElementById('diag-panel').innerHTML = html;
+}
+
 // Загрузить при старте
 loadChart();
+loadDiag();
 </script>
 {% endblock %}

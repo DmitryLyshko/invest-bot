@@ -214,5 +214,112 @@ def api_rsi_data(ticker: str):
             "post_close_cooldown_seconds": rsi_params.get("post_close_cooldown_seconds"),
             "trading_hours": rsi_params.get("trading_hours"),
             "skip_first_minutes": rsi_params.get("skip_first_minutes"),
+            "atr_ratio_min": rsi_params.get("atr_ratio_min", 0),
         },
+    })
+
+
+@bp.route("/api/rsi-test/<ticker>/diag")
+@login_required
+def api_rsi_diag(ticker: str):
+    """Диагностика: сигналы из БД и последние bot_logs для RSI-стратегии по тикеру."""
+    ticker = ticker.upper()
+
+    from trading_bot.db import repository
+    from trading_bot.db.repository import get_session
+    from trading_bot.db.models import Signal, BotLog, Instrument
+
+    with get_session() as session:
+        inst = session.query(Instrument).filter_by(ticker=ticker).first()
+        if inst is None:
+            return jsonify({"error": f"Инструмент {ticker} не найден в БД"}), 404
+
+        instrument_id = inst.id
+
+        # Последние 50 RSI-сигналов по тикеру
+        raw_signals = (
+            session.query(Signal)
+            .filter(
+                Signal.instrument_id == instrument_id,
+                Signal.strategy_name == "rsi",
+            )
+            .order_by(Signal.created_at.desc())
+            .limit(50)
+            .all()
+        )
+
+        signals_data = [
+            {
+                "id": s.id,
+                "type": s.signal_type,
+                "reason": s.reason,
+                "acted_on": s.acted_on,
+                "ofi_value": round(s.ofi_value, 2) if s.ofi_value is not None else None,
+                "created_at": s.created_at.isoformat(),
+            }
+            for s in raw_signals
+        ]
+
+        # Статистика по reason для acted_on=False
+        from sqlalchemy import func
+        reason_counts = (
+            session.query(Signal.reason, func.count(Signal.id).label("cnt"))
+            .filter(
+                Signal.instrument_id == instrument_id,
+                Signal.strategy_name == "rsi",
+                Signal.acted_on == False,
+            )
+            .group_by(Signal.reason)
+            .all()
+        )
+        blocked_by_reason = {r.reason: r.cnt for r in reason_counts}
+
+        # Всего сигналов
+        total_rsi_signals = (
+            session.query(func.count(Signal.id))
+            .filter(
+                Signal.instrument_id == instrument_id,
+                Signal.strategy_name == "rsi",
+            )
+            .scalar() or 0
+        )
+
+        acted_count = (
+            session.query(func.count(Signal.id))
+            .filter(
+                Signal.instrument_id == instrument_id,
+                Signal.strategy_name == "rsi",
+                Signal.acted_on == True,
+            )
+            .scalar() or 0
+        )
+
+        # Последние 30 bot_logs, связанных с RSI или риск-менеджером
+        logs = (
+            session.query(BotLog)
+            .filter(
+                BotLog.message.like(f"%{ticker}%") | BotLog.message.like("%rsi%") | (BotLog.component == "risk_manager"),
+            )
+            .order_by(BotLog.created_at.desc())
+            .limit(30)
+            .all()
+        )
+        logs_data = [
+            {
+                "level": l.level,
+                "component": l.component,
+                "message": l.message,
+                "created_at": l.created_at.isoformat(),
+            }
+            for l in logs
+        ]
+
+    return jsonify({
+        "ticker": ticker,
+        "instrument_id": instrument_id,
+        "total_rsi_signals": total_rsi_signals,
+        "acted_count": acted_count,
+        "blocked_by_reason": blocked_by_reason,
+        "recent_signals": signals_data,
+        "recent_logs": logs_data,
     })
