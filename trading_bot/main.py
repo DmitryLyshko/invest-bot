@@ -229,29 +229,51 @@ def warmup_rsi_strategy(figi: str, strategy: "RSIStrategy", rsi_params: dict) ->
     """
     Загрузить исторические 5-минутные свечи и прогреть RSI перед стартом торговли.
     RMA требует сотен баров для схождения — без прогрева значения расходятся с TradingView.
+
+    ВАЖНО: T-Invest API возвращает не более 1 дня 5-мин свечей за запрос.
+    Пагинируем по дням, как в rsi_test.py.
     """
     logger = logging.getLogger(__name__)
     warmup_candles = rsi_params.get("warmup_candles", 500)
-    # 500 свечей по 5 минут ≈ 41 час = ~5 торговых дней; берём 10 календарных с запасом
+    # 500 свечей × 5 мин ≈ 41 час ≈ 5 торговых дней; берём 14 календарных с запасом
+    days = 14
     now = datetime.now(timezone.utc)
-    from_ = now - timedelta(days=10)
 
     try:
         ClientClass = SandboxClient if settings.USE_SANDBOX else Client
+        candles = []
         with ClientClass(settings.TINKOFF_TOKEN) as client:
-            resp = client.market_data.get_candles(
-                figi=figi,
-                from_=from_,
-                to=now,
-                interval=CandleInterval.CANDLE_INTERVAL_5_MIN,
-            )
-        candles = [c for c in resp.candles if c.is_complete]
+            for day_offset in range(days - 1, -1, -1):
+                chunk_to = now - timedelta(days=day_offset)
+                chunk_from = chunk_to - timedelta(days=1)
+                try:
+                    resp = client.market_data.get_candles(
+                        figi=figi,
+                        from_=chunk_from,
+                        to=chunk_to,
+                        interval=CandleInterval.CANDLE_INTERVAL_5_MIN,
+                    )
+                    candles.extend(c for c in resp.candles if c.is_complete)
+                except Exception:
+                    logger.debug(f"RSI warmup: пропуск чанка {chunk_from:%Y-%m-%d} для {figi}")
+                    continue
+
+        # Дедупликация и сортировка
+        seen: set = set()
+        unique = []
+        for c in sorted(candles, key=lambda x: x.time):
+            if c.time not in seen:
+                seen.add(c.time)
+                unique.append(c)
+        candles = unique
+
         if not candles:
             logger.warning(f"RSI warmup {figi}: нет исторических свечей")
             return
 
         candles = candles[-warmup_candles:]
         closes = [float(quotation_to_decimal(c.close)) for c in candles]
+        logger.info(f"RSI warmup {figi}: загружено {len(closes)} свечей (запрошено {warmup_candles})")
         strategy.warmup(closes)
 
     except Exception:
