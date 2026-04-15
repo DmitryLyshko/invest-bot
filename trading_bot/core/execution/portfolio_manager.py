@@ -108,21 +108,34 @@ class PortfolioManager:
 
     # ── Position tracking ───────────────────────────────────────────────────────
 
-    def register_opened(self, instrument_id: int) -> None:
-        """Зарегистрировать открытую позицию."""
+    def try_register_opened(self, instrument_id: int, strategy_name: str) -> bool:
+        """
+        Атомарно проверить лимит и зарегистрировать позицию.
+
+        Возвращает True если позиция зарегистрирована, False если лимит достигнут.
+        Проверка и регистрация выполняются под одним локом — нет race condition
+        между параллельными потоками разных тикеров.
+        """
+        key = (instrument_id, strategy_name)
         with self._lock:
-            self._open_ids.add(instrument_id)
+            if len(self._open_ids) >= self._max_positions:
+                return False
+            self._open_ids.add(key)
         logger.debug(
-            f"Позиция зарегистрирована (instrument_id={instrument_id}), "
+            f"Позиция зарегистрирована ({strategy_name}/{instrument_id}), "
             f"всего открыто: {len(self._open_ids)}"
         )
+        return True
 
-    def register_closed(self, instrument_id: int) -> None:
+    def register_closed(self, instrument_id: int, strategy_name: str = "") -> None:
         """Снять регистрацию закрытой позиции."""
+        key = (instrument_id, strategy_name)
         with self._lock:
+            self._open_ids.discard(key)
+            # Обратная совместимость: убираем и старый формат int если вдруг остался
             self._open_ids.discard(instrument_id)
         logger.debug(
-            f"Позиция снята (instrument_id={instrument_id}), "
+            f"Позиция снята ({strategy_name}/{instrument_id}), "
             f"всего открыто: {len(self._open_ids)}"
         )
 
@@ -132,7 +145,7 @@ class PortfolioManager:
             return len(self._open_ids)
 
     def can_open(self) -> bool:
-        """Можно ли открыть ещё одну позицию (глобальный лимит)."""
+        """Можно ли открыть ещё одну позицию (глобальный лимит). Только для чтения."""
         return self.open_positions_count < self._max_positions
 
     # ── Lot size calculation ────────────────────────────────────────────────────

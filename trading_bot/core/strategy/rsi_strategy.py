@@ -332,33 +332,50 @@ class RSIStrategy(BaseStrategy):
         prev = self._prev_arsi
         assert prev is not None
 
+        # Допуск для фильтрации "фантомных" пересечений при старте бота:
+        # если arsi слишком далеко ушёл от уровня — пересечение было не здесь,
+        # а в промежутке между историческими данными и живым стримом.
+        entry_margin = self.params.get("entry_margin", 10.0)
+
         # LONG: arsi пересекает os_ снизу вверх
         if prev < os_ and arsi >= os_:
-            self._signal = Signal(
-                signal_type=SignalType.LONG,
-                reason=SignalReason.COMBO_TRIGGERED,
-                ofi_value=arsi,
-                print_volume=signal_line,
-                timestamp=now,
-            )
-            self._last_entry_time = now
-            logger.info(
-                f"RSI LONG: arsi={arsi:.1f} пересёк OS {os_:.0f} снизу вверх"
-            )
+            if arsi > os_ + entry_margin:
+                logger.info(
+                    f"RSI LONG заблокирован: arsi={arsi:.1f} слишком далеко от OS {os_:.0f} "
+                    f"(допуск {entry_margin:.0f}) — фантомное пересечение при старте"
+                )
+            else:
+                self._signal = Signal(
+                    signal_type=SignalType.LONG,
+                    reason=SignalReason.COMBO_TRIGGERED,
+                    ofi_value=arsi,
+                    print_volume=signal_line,
+                    timestamp=now,
+                )
+                self._last_entry_time = now
+                logger.info(
+                    f"RSI LONG: arsi={arsi:.1f} пересёк OS {os_:.0f} снизу вверх"
+                )
 
         # SHORT: arsi пересекает ob_ сверху вниз
         elif prev > ob and arsi <= ob:
-            self._signal = Signal(
-                signal_type=SignalType.SHORT,
-                reason=SignalReason.COMBO_TRIGGERED,
-                ofi_value=arsi,
-                print_volume=signal_line,
-                timestamp=now,
-            )
-            self._last_entry_time = now
-            logger.info(
-                f"RSI SHORT: arsi={arsi:.1f} пересёк OB {ob:.0f} сверху вниз"
-            )
+            if arsi < ob - entry_margin:
+                logger.info(
+                    f"RSI SHORT заблокирован: arsi={arsi:.1f} слишком далеко от OB {ob:.0f} "
+                    f"(допуск {entry_margin:.0f}) — фантомное пересечение при старте"
+                )
+            else:
+                self._signal = Signal(
+                    signal_type=SignalType.SHORT,
+                    reason=SignalReason.COMBO_TRIGGERED,
+                    ofi_value=arsi,
+                    print_volume=signal_line,
+                    timestamp=now,
+                )
+                self._last_entry_time = now
+                logger.info(
+                    f"RSI SHORT: arsi={arsi:.1f} пересёк OB {ob:.0f} сверху вниз"
+                )
 
     def _try_exit(
         self,

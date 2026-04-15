@@ -156,29 +156,34 @@ class PositionManager:
             return
 
         if signal.signal_type in (SignalType.LONG, SignalType.SHORT):
-            # Глобальный лимит одновременных позиций — проверяем ДО записи сигнала.
-            # Иначе сигнал попадёт в БД как acted_on=True, хотя ордер не выставлялся.
-            if self.portfolio_manager and not self.portfolio_manager.can_open():
-                count = self.portfolio_manager.open_positions_count
-                max_pos = self.portfolio_manager._max_positions
-                logger.warning(
-                    f"Глобальный лимит позиций достигнут: {count}/{max_pos}. "
-                    "Открытие заблокировано."
+            # Атомарная проверка лимита + регистрация под одним локом.
+            # Защищает от race condition когда несколько потоков одновременно
+            # проходят проверку can_open() до того как кто-то успел register_opened().
+            if self.portfolio_manager:
+                registered = self.portfolio_manager.try_register_opened(
+                    self.instrument_id, self.strategy_name
                 )
-                self._save_signal(
-                    signal_type=signal.signal_type.value,
-                    ofi_value=signal.ofi_value or 0.0,
-                    print_volume=signal.print_volume,
-                    print_side=signal.print_side,
-                    reason=signal.reason.value,
-                    acted_on=False,
-                )
-                repository.log_event(
-                    "WARNING",
-                    "position_manager",
-                    f"Открытие заблокировано: достигнут лимит {max_pos} одновременных позиций",
-                )
-                return
+                if not registered:
+                    count = self.portfolio_manager.open_positions_count
+                    max_pos = self.portfolio_manager._max_positions
+                    logger.warning(
+                        f"Глобальный лимит позиций достигнут: {count}/{max_pos}. "
+                        "Открытие заблокировано."
+                    )
+                    self._save_signal(
+                        signal_type=signal.signal_type.value,
+                        ofi_value=signal.ofi_value or 0.0,
+                        print_volume=signal.print_volume,
+                        print_side=signal.print_side,
+                        reason=signal.reason.value,
+                        acted_on=False,
+                    )
+                    repository.log_event(
+                        "WARNING",
+                        "position_manager",
+                        f"Открытие заблокировано: достигнут лимит {max_pos} одновременных позиций",
+                    )
+                    return
 
             db_signal = self._save_signal(
                 signal_type=signal.signal_type.value,
@@ -277,9 +282,7 @@ class PositionManager:
         # Сообщаем стратегии о новой позиции — она начнёт следить за выходом
         self.strategy.set_position(position_direction)
 
-        # Регистрируем позицию в глобальном портфеле
-        if self.portfolio_manager:
-            self.portfolio_manager.register_opened(self.instrument_id)
+        # Позиция уже зарегистрирована атомарно в try_register_opened() до вызова этого метода
 
         repository.log_event(
             "INFO",
@@ -397,7 +400,7 @@ class PositionManager:
 
         # Снимаем регистрацию в глобальном портфеле
         if self.portfolio_manager:
-            self.portfolio_manager.register_closed(self.instrument_id)
+            self.portfolio_manager.register_closed(self.instrument_id, self.strategy_name)
 
     def update_market_price(self, price: float) -> None:
         """
@@ -414,6 +417,11 @@ class PositionManager:
             return
 
         self._position.current_price = price
+
+        # Если стратегия полностью выключена — не трогаем позицию
+        if not repository.get_strategy_active(self.strategy_name):
+            return
+
         self._check_stop_loss(price)
 
     def check_timeout(self) -> None:
@@ -422,6 +430,9 @@ class PositionManager:
         Вызывается по расписанию (раз в минуту) из планировщика.
         """
         if self._position is None:
+            return
+
+        if not repository.get_strategy_active(self.strategy_name):
             return
 
         max_hold = self.params.get("max_hold_minutes", 60)
@@ -452,6 +463,9 @@ class PositionManager:
         """
         eod_str = self.params.get("eod_close_time")
         if not eod_str or self._position is None:
+            return
+
+        if not repository.get_strategy_active(self.strategy_name):
             return
 
         from datetime import time as dt_time
@@ -680,7 +694,12 @@ class PositionManager:
 
             self.strategy.set_position(direction)
             if self.portfolio_manager:
-                self.portfolio_manager.register_opened(self.instrument_id)
+                # При восстановлении позиции регистрируем напрямую, минуя лимит
+                # (позиция уже реально открыта в брокере)
+                with self.portfolio_manager._lock:
+                    self.portfolio_manager._open_ids.add(
+                        (self.instrument_id, self.strategy_name)
+                    )
 
             logger.info(
                 f"[{self.ticker}/{self.strategy_name}] Позиция восстановлена после рестарта: "
