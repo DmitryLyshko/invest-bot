@@ -130,8 +130,6 @@ SBER:
   ofi_scale: 1000                    # масштаб tanh-нормализации (подбирается под ликвидность инструмента)
   ofi_auto_calibrate_window: 0       # > 0: первые N снапшотов → p90(|raw_ofi|) заменяет ofi_scale; 0 = откл
   trend_ma_window: 1000              # окно MA mid-цен для фильтра тренда (0 = выкл)
-  activity_window: 50                # окно снапшотов для фильтра активности рынка (0 = выкл)
-  min_activity_range_ticks: 3        # мин. диапазон mid-цены за activity_window снапшотов; если меньше — вход заблокирован (0 = выкл)
   min_ofi_entry_confirmations: 3     # N подряд OFI-чтений выше порога до генерации сигнала входа
   max_position_lots: 500             # жёсткий потолок лотов; не должен мешать расчёту 30% — compute_lots считает долю портфеля динамически
 
@@ -212,9 +210,8 @@ class ComboStrategy(BaseStrategy):
     reset()
     # property: current_ofi
 ```
-**Вход:** `|OFI| >= ofi_threshold` на `min_ofi_entry_confirmations` подряд + принт той же стороны + свежесть принта ≤ **15с** + cooldown + фильтр тренда + фильтр активности.
+**Вход:** `|OFI| >= ofi_threshold` на `min_ofi_entry_confirmations` подряд + принт той же стороны + свежесть принта ≤ **15с** + cooldown + фильтр тренда.
 **Фильтр тренда:** если `trend_ma_window > 0` — LONG разрешён только при `mid > MA(N)`, SHORT — при `mid < MA(N)`. До заполнения окна входы блокируются. `0` = отключён.
-**Фильтр активности рынка:** если `activity_window > 0` и `min_activity_range_ticks > 0` — диапазон mid-цены за последние N снапшотов должен быть ≥ min_range_ticks * tick_size. Если рынок "стоит" — вход блокируется.
 **Подтверждения входа:** `_ofi_entry_confirmations` — счётчик последовательных OFI-чтений в одном направлении. При смене направления сбрасывается. Сигнал только при `count >= min_ofi_entry_confirmations`.
 **Выход:** только через stop-loss / take-profit / trailing-stop / timeout (PositionManager). OFI-разворот как причина выхода — отключён.
 
@@ -615,26 +612,34 @@ class AugmentedRSI:
     update(close) → (arsi, signal) | None
 
 class RSIStrategy(BaseStrategy):
-    on_orderbook(data)   → no-op
-    on_trade(data)       → кормит CandleAggregator
-    get_signal()         → Signal | None
+    on_orderbook(data)          → no-op
+    on_trade(data)              → кормит CandleAggregator
+    get_signal()                → Signal | None
     set_position(direction, close_time)
-    current_ofi          → last_arsi (для совместимости с PositionManager)
+    warmup(closes: list[float]) → прогрев RMA на исторических данных
+    update_atr(short, long)     → обновить ATR-фильтр (из планировщика)
+    current_ofi                 → last_arsi (для совместимости с PositionManager)
 ```
-**Алгоритм Augmented RSI:**
+**Алгоритм Augmented RSI (LuxAlgo):**
 `diff = r если upper растёт; -r если lower падает; d=close−prev иначе`
 `arsi = rma(diff)/rma(|diff|) * 50 + 50`  диапазон [0, 100]
 `signal = ema(arsi, smooth)`
 
-**Входы:** arsi пересекает os_value снизу → LONG; ob_value сверху → SHORT.
-**Выходы:** arsi пересекает signal line в обратном направлении (+ стоп/тейк от PositionManager).
+**Входы:** arsi пересекает os_value снизу вверх → LONG; ob_value сверху вниз → SHORT.
+**Выход:** только через stop-loss / take-profit / trailing-stop / timeout (PositionManager). Выход по signal line — отключён.
+
+**Прогрев при старте:** `warmup_rsi_strategy()` в `main.py` загружает последние `warmup_candles` (default 500) 5-минутных свечей из API и прогоняет через `AugmentedRSI.update()`. Без прогрева RMA не сходится и значения расходятся с TradingView.
+
+**ATR-фильтр активности:** каждые 5 минут `refresh_rsi_atr()` загружает свечи за `atr_days` дней, считает `short_atr` (последние N свечей) и `long_atr` (среднее за все дни). Если `short_atr / long_atr < atr_ratio_min` — рынок неактивен, вход заблокирован.
 
 ### `rsi_config.yaml`
 Структура: один тикер = одна секция. Тикеры должны совпадать с `instruments.yaml`.
 Параметры: `length`, `smooth`, `smo_type_rsi`, `smo_type_signal`, `ob_value`, `os_value`,
 `stop_ticks`, `breakeven_ticks`, `take_profit_ticks`, `trailing_stop_ticks`,
 `max_position_lots`, `max_hold_minutes`, `cooldown_seconds`, `post_close_cooldown_seconds`,
-`trading_hours`, `skip_first_minutes`, `min_hold_seconds`, `min_profit_ticks_for_ofi_exit`.
+`trading_hours`, `skip_first_minutes`, `min_hold_seconds`,
+`atr_days` (default 5), `atr_length_short` (default 5), `atr_ratio_min` (default 0 = выкл),
+`warmup_candles` (default 500).
 figi / instrument_id / lot_size / tick_size / commission_rate берутся из `instruments.yaml`.
 
 ### Новые поля БД

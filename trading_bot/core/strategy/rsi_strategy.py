@@ -286,8 +286,6 @@ class RSIStrategy(BaseStrategy):
 
         if self._position_direction is None:
             self._try_entry(arsi, signal_line, now, ob, os_)
-        else:
-            self._try_exit(arsi, signal_line, now)
 
         self._prev_arsi = arsi
         self._prev_signal_line = signal_line
@@ -358,52 +356,6 @@ class RSIStrategy(BaseStrategy):
             self._last_entry_time = now
             logger.info(
                 f"RSI SHORT: arsi={arsi:.1f} пересёк OB {ob:.0f} сверху вниз"
-            )
-
-    def _try_exit(self, arsi: float, signal_line: float, now: datetime) -> None:
-        """Проверить условие выхода через пересечение signal line."""
-        min_hold = self.params.get("min_hold_seconds", 300)
-        if self._last_entry_time is not None:
-            if (now - self._last_entry_time).total_seconds() < min_hold:
-                return
-
-        prev = self._prev_arsi
-        prev_sig = self._prev_signal_line
-        if prev is None or prev_sig is None or signal_line is None:
-            return
-
-        # EXIT для LONG: arsi пересекает signal line сверху вниз
-        if (
-            self._position_direction == "long"
-            and prev >= prev_sig
-            and arsi < signal_line
-        ):
-            self._signal = Signal(
-                signal_type=SignalType.EXIT,
-                reason=SignalReason.OFI_REVERSED,
-                ofi_value=arsi,
-                print_volume=signal_line,
-                timestamp=now,
-            )
-            logger.info(
-                f"RSI EXIT long: arsi={arsi:.1f} < signal={signal_line:.1f}"
-            )
-
-        # EXIT для SHORT: arsi пересекает signal line снизу вверх
-        elif (
-            self._position_direction == "short"
-            and prev <= prev_sig
-            and arsi > signal_line
-        ):
-            self._signal = Signal(
-                signal_type=SignalType.EXIT,
-                reason=SignalReason.OFI_REVERSED,
-                ofi_value=arsi,
-                print_volume=signal_line,
-                timestamp=now,
-            )
-            logger.info(
-                f"RSI EXIT short: arsi={arsi:.1f} > signal={signal_line:.1f}"
             )
 
     def _is_trading_hours(self, ts: datetime) -> bool:
