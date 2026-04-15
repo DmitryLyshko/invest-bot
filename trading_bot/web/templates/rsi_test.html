@@ -59,13 +59,28 @@
         </div>
 
         <!-- Таблица сигналов из графика -->
-        <div class="card" style="max-height: 180px; overflow-y: auto;">
-            <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: #718096; margin-bottom: 0.75rem;">
-                Сигналы входа на графике (пересечения OB/OS)
+        <div class="card" style="min-height: 260px; max-height: 420px; overflow-y: auto;">
+            <div style="display:flex; align-items:baseline; gap:0.75rem; margin-bottom:0.4rem;">
+                <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: #718096;">
+                    Сигналы на графике (с фильтрами стратегии)
+                </div>
+                <span id="signals-count" style="font-size:0.75rem;color:#4299e1;"></span>
+            </div>
+            <div style="font-size:0.72rem;color:#718096;margin-bottom:0.6rem;line-height:1.5;">
+                Применены: торговые часы, кулдаун, entry_margin.
+                В БД также учитывается ATR-фильтр и реальная ситуация в момент сигнала.
             </div>
             <div id="signals-table-wrap">
                 <span style="color: #718096; font-size: 0.85rem;">—</span>
             </div>
+        </div>
+
+        <!-- Сделки (вход → выход) -->
+        <div class="card" id="trades-card" style="display:none; min-height: 200px; max-height: 380px; overflow-y: auto;">
+            <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: #718096; margin-bottom: 0.5rem;">
+                Сделки — вход и выход
+            </div>
+            <div id="trades-wrap"></div>
         </div>
 
         <!-- Диагностика из БД -->
@@ -116,6 +131,8 @@ function loadChart() {
     document.getElementById('rsi-chart').style.display = 'none';
     document.getElementById('info-panel').style.display = 'none';
     document.getElementById('signals-table-wrap').innerHTML = '<span style="color: #718096; font-size: 0.85rem;">Загрузка...</span>';
+    document.getElementById('signals-count').textContent = '';
+    document.getElementById('trades-card').style.display = 'none';
 
     fetch(`/api/rsi-test/${currentTicker}?days=${days}&display=${display}`)
         .then(r => r.json())
@@ -130,6 +147,7 @@ function loadChart() {
             renderChart(data);
             renderInfoPanel(data);
             renderSignalsTable(data);
+            renderTrades(data);
         })
         .catch(err => {
             document.getElementById('loading').style.display = 'none';
@@ -149,12 +167,24 @@ function renderChart(data) {
         return d.toLocaleString('ru', {month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'});
     });
 
-    // Сигналы: массив точек для scatter
+    // Сигналы: разбивка по типу и статусу
     const longSignals = data.signals
-        .filter(s => s.type === 'long')
+        .filter(s => s.type === 'long' && s.passed)
         .map(s => ({x: labels[s.idx], y: s.arsi}));
     const shortSignals = data.signals
-        .filter(s => s.type === 'short')
+        .filter(s => s.type === 'short' && s.passed)
+        .map(s => ({x: labels[s.idx], y: s.arsi}));
+    const longBlocked = data.signals
+        .filter(s => s.type === 'long' && !s.passed)
+        .map(s => ({x: labels[s.idx], y: s.arsi}));
+    const shortBlocked = data.signals
+        .filter(s => s.type === 'short' && !s.passed)
+        .map(s => ({x: labels[s.idx], y: s.arsi}));
+    const exitLong = data.signals
+        .filter(s => s.type === 'exit_long')
+        .map(s => ({x: labels[s.idx], y: s.arsi}));
+    const exitShort = data.signals
+        .filter(s => s.type === 'exit_short')
         .map(s => ({x: labels[s.idx], y: s.arsi}));
 
     // Горизонтальные линии OB/OS через plugin annotation или просто datasets
@@ -218,7 +248,7 @@ function renderChart(data) {
                     data: longSignals,
                     backgroundColor: '#68d391',
                     pointStyle: 'triangle',
-                    pointRadius: 8,
+                    pointRadius: 9,
                     order: 0,
                 },
                 {
@@ -228,8 +258,45 @@ function renderChart(data) {
                     backgroundColor: '#fc8181',
                     pointStyle: 'triangle',
                     rotation: 180,
-                    pointRadius: 8,
+                    pointRadius: 9,
                     order: 0,
+                },
+                {
+                    label: 'EXIT↑',
+                    type: 'scatter',
+                    data: exitLong,
+                    backgroundColor: '#76e4f7',
+                    pointStyle: 'rectRot',
+                    pointRadius: 7,
+                    order: 0,
+                },
+                {
+                    label: 'EXIT↓',
+                    type: 'scatter',
+                    data: exitShort,
+                    backgroundColor: '#f6ad55',
+                    pointStyle: 'rectRot',
+                    pointRadius: 7,
+                    order: 0,
+                },
+                {
+                    label: 'LONG заблок.',
+                    type: 'scatter',
+                    data: longBlocked,
+                    backgroundColor: 'rgba(104,211,145,0.3)',
+                    pointStyle: 'triangle',
+                    pointRadius: 5,
+                    order: 1,
+                },
+                {
+                    label: 'SHORT заблок.',
+                    type: 'scatter',
+                    data: shortBlocked,
+                    backgroundColor: 'rgba(252,129,129,0.3)',
+                    pointStyle: 'triangle',
+                    rotation: 180,
+                    pointRadius: 5,
+                    order: 1,
                 },
             ]
         },
@@ -321,24 +388,130 @@ function renderInfoPanel(data) {
 
 function renderSignalsTable(data) {
     const wrap = document.getElementById('signals-table-wrap');
-    if (!data.signals.length) {
+    const entries = data.signals.filter(s => s.type === 'long' || s.type === 'short');
+    const exits = data.signals.filter(s => s.type === 'exit_long' || s.type === 'exit_short');
+    const passed = entries.filter(s => s.passed).length;
+    const blocked = entries.filter(s => !s.passed).length;
+
+    document.getElementById('signals-count').textContent =
+        `${entries.length} пересечений (${passed} прошло, ${blocked} заблок.) · ${exits.length} выходов`;
+
+    if (!entries.length) {
         wrap.innerHTML = '<span style="color: #718096; font-size: 0.85rem;">Нет сигналов за выбранный период</span>';
         return;
     }
 
-    const rows = data.signals.slice().reverse().map(s => {
-        const badge = s.type === 'long'
-            ? '<span class="badge badge-long">LONG</span>'
-            : '<span class="badge badge-short">SHORT</span>';
-        const d = new Date(s.ts);
-        const ts = d.toLocaleString('ru', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
-        return `<tr><td>${badge}</td><td>${ts}</td><td style="font-weight:600;color:#4299e1;">${s.arsi.toFixed(1)}</td></tr>`;
+    const allSorted = data.signals.slice().sort((a,b) => a.idx - b.idx);
+    const rows = allSorted.map(s => {
+        const isEntry = s.type === 'long' || s.type === 'short';
+        const isExit  = s.type === 'exit_long' || s.type === 'exit_short';
+
+        let badge;
+        if (s.type === 'long')
+            badge = '<span class="badge badge-long">LONG</span>';
+        else if (s.type === 'short')
+            badge = '<span class="badge badge-short">SHORT</span>';
+        else if (s.type === 'exit_long')
+            badge = '<span class="badge" style="background:#1a3a42;color:#76e4f7;border:1px solid #76e4f766;">EXIT↑</span>';
+        else
+            badge = '<span class="badge" style="background:#3a2a1a;color:#f6ad55;border:1px solid #f6ad5566;">EXIT↓</span>';
+
+        let statusCell;
+        if (isEntry) {
+            statusCell = s.passed
+                ? '<td><span style="color:#68d391;font-size:0.78rem;">✓ прошёл</span></td><td style="color:#718096;font-size:0.75rem;">—</td>'
+                : `<td><span style="color:#f6ad55;font-size:0.78rem;">✗ блок</span></td><td style="color:#f6ad55;font-size:0.75rem;">${s.blocked_reason}</td>`;
+        } else {
+            const dir = s.type === 'exit_long' ? 'ARSI ↓ сигн.' : 'ARSI ↑ сигн.';
+            statusCell = `<td colspan="2" style="color:#a0aec0;font-size:0.75rem;">${dir} (prev ${s.prev_arsi}→${s.arsi})</td>`;
+        }
+
+        const arsiColor = isExit ? '#a0aec0' : s.passed ? '#4299e1' : '#718096';
+        return `<tr style="${isEntry && !s.passed ? 'opacity:0.6' : ''}">
+            <td>${badge}</td>
+            <td style="color:#a0aec0;white-space:nowrap;">${s.ts_msk}</td>
+            <td style="font-weight:600;color:${arsiColor};">${s.arsi.toFixed(1)}</td>
+            <td style="color:#718096;font-size:0.8rem;">${s.signal_line !== undefined ? s.signal_line.toFixed(1) : '—'}</td>
+            ${statusCell}
+        </tr>`;
     }).join('');
 
-    wrap.innerHTML = `<table>
-        <thead><tr><th>Тип</th><th>Время</th><th>ARSI</th></tr></thead>
+    wrap.innerHTML = `<div style="overflow-x:auto;"><table>
+        <thead><tr>
+            <th>Тип</th><th>Время МСК</th><th>ARSI</th><th>Signal</th>
+            <th>Статус</th><th>Причина</th>
+        </tr></thead>
         <tbody>${rows}</tbody>
-    </table>`;
+    </table></div>`;
+}
+
+function renderTrades(data) {
+    const card = document.getElementById('trades-card');
+    const wrap = document.getElementById('trades-wrap');
+
+    const entries = data.signals.filter(s =>
+        (s.type === 'long' || s.type === 'short') && s.passed
+    );
+
+    if (!entries.length) {
+        card.style.display = 'none';
+        return;
+    }
+
+    card.style.display = 'block';
+
+    const rows = entries.map((entry, i) => {
+        const dirBadge = entry.type === 'long'
+            ? '<span class="badge badge-long">LONG</span>'
+            : '<span class="badge badge-short">SHORT</span>';
+
+        // Причина входа
+        const ob = data.ob, os = data.os;
+        let entryReason;
+        if (entry.type === 'long') {
+            entryReason = `ARSI пересёк OS ${os} снизу вверх<br>
+                <span style="color:#718096;font-size:0.72rem;">было: ${entry.prev_arsi} → стало: ${entry.arsi}</span>`;
+        } else {
+            entryReason = `ARSI пересёк OB ${ob} сверху вниз<br>
+                <span style="color:#718096;font-size:0.72rem;">было: ${entry.prev_arsi} → стало: ${entry.arsi}</span>`;
+        }
+
+        // Выход
+        let exitCell;
+        if (entry.exit_signal_idx !== null && entry.exit_signal_idx !== undefined) {
+            const ex = data.signals[entry.exit_signal_idx];
+            const dir = ex.type === 'exit_long' ? 'ARSI ↓ сигнальную линию' : 'ARSI ↑ сигнальную линию';
+            exitCell = `<td style="white-space:nowrap;color:#a0aec0;">${ex.ts_msk}</td>
+                <td style="color:#a0aec0;">${ex.arsi.toFixed(1)}</td>
+                <td style="font-size:0.78rem;color:#a0aec0;">${dir}<br>
+                    <span style="color:#718096;font-size:0.72rem;">было: ${ex.prev_arsi} → стало: ${ex.arsi}</span>
+                </td>`;
+        } else if (data.params.use_crossover_exit) {
+            exitCell = `<td colspan="3" style="color:#718096;font-size:0.78rem;">
+                Позиция открыта в конце периода</td>`;
+        } else {
+            exitCell = `<td colspan="3" style="color:#718096;font-size:0.78rem;">
+                Выход по стоп/тейк/тайм-ауту<br>
+                <span style="font-size:0.7rem;">(use_crossover_exit=false — выходы не симулируются)</span></td>`;
+        }
+
+        return `<tr>
+            <td>${i + 1}</td>
+            <td>${dirBadge}</td>
+            <td style="white-space:nowrap;color:#e2e8f0;">${entry.ts_msk}</td>
+            <td style="font-size:0.78rem;color:#a0aec0;line-height:1.5;">${entryReason}</td>
+            ${exitCell}
+        </tr>`;
+    }).join('');
+
+    wrap.innerHTML = `<div style="overflow-x:auto;"><table>
+        <thead><tr>
+            <th>#</th><th>Напр.</th>
+            <th>Вход МСК</th><th>Причина входа</th>
+            <th>Выход МСК</th><th>ARSI вых.</th><th>Причина выхода</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+    </table></div>`;
 }
 
 function loadDiag() {
@@ -382,6 +555,20 @@ function renderDiag(data) {
         <div style="font-size:1.3rem;font-weight:700;color:${(total-acted)>0?'#f6ad55':'#718096'}">${total - acted}</div>
     </div>`;
 
+    if (data.last_signal_ts) {
+        html += `<div class="card" style="padding:0.5rem 0.9rem;flex:none;">
+            <div class="card-title">Последний RSI сигнал</div>
+            <div style="font-size:0.9rem;font-weight:600;color:#a0aec0;">${data.last_signal_ts} МСК</div>
+        </div>`;
+    }
+    if (data.null_strategy_signals > 0) {
+        html += `<div class="card" style="padding:0.5rem 0.9rem;flex:none;border-color:#f6ad5555;">
+            <div class="card-title" style="color:#f6ad55;">Сигналы без strategy_name</div>
+            <div style="font-size:1.1rem;font-weight:700;color:#f6ad55;">${data.null_strategy_signals}</div>
+            <div style="font-size:0.7rem;color:#718096;">strategy_name колонка не смигрирована</div>
+        </div>`;
+    }
+
     // Разбивка по причинам блокировки
     if (Object.keys(blocked).length > 0) {
         const reasons = Object.entries(blocked).sort((a,b) => b[1]-a[1]);
@@ -394,14 +581,60 @@ function renderDiag(data) {
 
     html += `</div>`;
 
+    // Сделки RSI из БД
+    html += `<div style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.05em;color:#718096;margin-bottom:0.5rem;margin-top:0.5rem;">
+        Сделки RSI в БД (всего: ${data.total_trades}, P&amp;L: <span style="color:${data.total_pnl>=0?'#68d391':'#fc8181'}">${data.total_pnl>=0?'+':''}${data.total_pnl.toFixed(2)} ₽</span>)
+    </div>`;
+    if (data.recent_trades && data.recent_trades.length > 0) {
+        html += `<div style="overflow-x:auto;max-height:200px;overflow-y:auto;margin-bottom:1rem;"><table>
+            <thead><tr>
+                <th>#</th><th>Напр.</th>
+                <th>Вход МСК</th><th>Цена вх.</th>
+                <th>Выход МСК</th><th>Цена вых.</th>
+                <th>Лотов</th><th>P&amp;L ₽</th>
+                <th>Причина выхода</th><th>Удерж.</th>
+            </tr></thead><tbody>`;
+        for (const t of data.recent_trades) {
+            const dir = t.direction === 'long'
+                ? '<span class="badge badge-long">LONG</span>'
+                : '<span class="badge badge-short">SHORT</span>';
+            const pnlColor = t.pnl_rub >= 0 ? '#68d391' : '#fc8181';
+            const holdMin = Math.round(t.hold_seconds / 60);
+            const holdStr = holdMin >= 60 ? `${Math.floor(holdMin/60)}ч ${holdMin%60}м` : `${holdMin}м`;
+            const exitReasonMap = {
+                stop_loss: 'стоп-лосс', trailing_stop: 'трейлинг-стоп',
+                take_profit: 'тейк-профит', timeout: 'тайм-аут',
+                ofi_reversed: 'crossover', breakeven_stop: 'безубыток',
+                eod_close: 'конец дня', manual: 'вручную',
+            };
+            const exitReason = exitReasonMap[t.exit_reason] || t.exit_reason;
+            html += `<tr>
+                <td style="color:#718096">${t.id}</td>
+                <td>${dir}</td>
+                <td style="white-space:nowrap;color:#a0aec0">${t.open_at_msk}</td>
+                <td style="color:#e2e8f0">${t.open_price.toFixed(2)}</td>
+                <td style="white-space:nowrap;color:#a0aec0">${t.close_at_msk}</td>
+                <td style="color:#e2e8f0">${t.close_price.toFixed(2)}</td>
+                <td style="color:#a0aec0">${t.quantity}</td>
+                <td style="font-weight:600;color:${pnlColor}">${t.pnl_rub >= 0 ? '+' : ''}${t.pnl_rub.toFixed(2)}</td>
+                <td style="font-size:0.75rem;color:#a0aec0">${exitReason}</td>
+                <td style="font-size:0.75rem;color:#718096">${holdStr}</td>
+            </tr>`;
+        }
+        html += `</tbody></table></div>`;
+    } else {
+        html += `<div style="color:#718096;font-size:0.82rem;margin-bottom:1rem;">
+            Нет сделок RSI в БД для ${data.ticker}.
+            Убедитесь что бот запущен с RSI-конфигом для этого тикера.
+        </div>`;
+    }
+
     // Последние сигналы из БД
     if (data.recent_signals.length > 0) {
         html += `<div style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.05em;color:#718096;margin-bottom:0.5rem;">Последние сигналы RSI в БД</div>`;
         html += `<div style="overflow-x:auto;max-height:140px;overflow-y:auto;margin-bottom:1rem;"><table>
-            <thead><tr><th>Время</th><th>Тип</th><th>ARSI</th><th>Причина</th><th>Исполнен</th></tr></thead><tbody>`;
+            <thead><tr><th>Время МСК</th><th>Тип</th><th>ARSI</th><th>Причина</th><th>Исполнен</th></tr></thead><tbody>`;
         for (const s of data.recent_signals) {
-            const d = new Date(s.created_at);
-            const ts = d.toLocaleString('ru',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
             const badge = s.type === 'long' ? '<span class="badge badge-long">LONG</span>'
                         : s.type === 'short' ? '<span class="badge badge-short">SHORT</span>'
                         : '<span class="badge badge-exit">EXIT</span>';
@@ -409,14 +642,13 @@ function renderDiag(data) {
                 ? '<span class="badge badge-yes">Да</span>'
                 : '<span class="badge badge-no">Нет</span>';
             const arsi = s.ofi_value !== null ? s.ofi_value.toFixed(1) : '—';
-            html += `<tr><td style="color:#a0aec0">${ts}</td><td>${badge}</td><td style="color:#4299e1">${arsi}</td><td style="font-size:0.75rem;color:#718096">${s.reason||'—'}</td><td>${acted}</td></tr>`;
+            html += `<tr><td style="color:#a0aec0;white-space:nowrap">${s.created_at_msk}</td><td>${badge}</td><td style="color:#4299e1">${arsi}</td><td style="font-size:0.75rem;color:#718096">${s.reason||'—'}</td><td>${acted}</td></tr>`;
         }
         html += `</tbody></table></div>`;
     } else if (total === 0) {
         html += `<div style="background:#1e1a2a;border:1px solid #fc818155;border-radius:6px;padding:0.75rem 1rem;margin-bottom:1rem;color:#fc8181;font-size:0.85rem;">
             ⚠ RSI-стратегия для ${data.ticker} не записала ни одного сигнала в БД.<br>
-            Это означает что <code>position_manager.on_signal()</code> ни разу не вызывался.<br>
-            Возможные причины: стратегия не активна в rsi_config.yaml, бот не запускался с RSI для этого тикера,
+            Возможные причины: стратегия не активна в rsi_config.yaml, бот не запускался с RSI,
             или CandleAggregator не закрывает свечи (нет тиков в стриме).
         </div>`;
     }
