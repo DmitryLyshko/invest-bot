@@ -174,9 +174,10 @@ class RSIStrategy(BaseStrategy):
       - get_signal()   → возвращает накопленный сигнал и сбрасывает его
     """
 
-    def __init__(self, instrument_config: Dict[str, Any]) -> None:
+    def __init__(self, instrument_config: Dict[str, Any], ticker: str = "") -> None:
         # Инициализируем RSI до вызова super().__init__,
         # так как load_params обращается к self._rsi.
+        self.ticker = ticker
         self._rsi: AugmentedRSI = AugmentedRSI()
         self._aggregator: CandleAggregator = CandleAggregator(
             interval_minutes=5,
@@ -287,7 +288,8 @@ class RSIStrategy(BaseStrategy):
         if self._position_direction is None:
             self._try_entry(arsi, signal_line, now, ob, os_)
         else:
-            self._try_exit(arsi, signal_line, now)
+            if self.params.get("use_crossover_exit", False):
+                self._try_exit(arsi, signal_line, now)
 
         self._prev_arsi = arsi
         self._prev_signal_line = signal_line
@@ -341,7 +343,7 @@ class RSIStrategy(BaseStrategy):
         if prev < os_ and arsi >= os_:
             if arsi > os_ + entry_margin:
                 logger.info(
-                    f"RSI LONG заблокирован: arsi={arsi:.1f} слишком далеко от OS {os_:.0f} "
+                    f"[{self.ticker}] RSI LONG заблокирован: arsi={arsi:.1f} слишком далеко от OS {os_:.0f} "
                     f"(допуск {entry_margin:.0f}) — фантомное пересечение при старте"
                 )
             else:
@@ -354,14 +356,14 @@ class RSIStrategy(BaseStrategy):
                 )
                 self._last_entry_time = now
                 logger.info(
-                    f"RSI LONG: arsi={arsi:.1f} пересёк OS {os_:.0f} снизу вверх"
+                    f"[{self.ticker}] RSI LONG: arsi={arsi:.1f} пересёк OS {os_:.0f} снизу вверх"
                 )
 
         # SHORT: arsi пересекает ob_ сверху вниз
         elif prev > ob and arsi <= ob:
             if arsi < ob - entry_margin:
                 logger.info(
-                    f"RSI SHORT заблокирован: arsi={arsi:.1f} слишком далеко от OB {ob:.0f} "
+                    f"[{self.ticker}] RSI SHORT заблокирован: arsi={arsi:.1f} слишком далеко от OB {ob:.0f} "
                     f"(допуск {entry_margin:.0f}) — фантомное пересечение при старте"
                 )
             else:
@@ -374,7 +376,7 @@ class RSIStrategy(BaseStrategy):
                 )
                 self._last_entry_time = now
                 logger.info(
-                    f"RSI SHORT: arsi={arsi:.1f} пересёк OB {ob:.0f} сверху вниз"
+                    f"[{self.ticker}] RSI SHORT: arsi={arsi:.1f} пересёк OB {ob:.0f} сверху вниз"
                 )
 
     def _try_exit(
@@ -411,7 +413,7 @@ class RSIStrategy(BaseStrategy):
                 timestamp=now,
             )
             logger.info(
-                f"RSI EXIT ({self._position_direction}): arsi={arsi:.1f} пересёк "
+                f"[{self.ticker}] RSI EXIT ({self._position_direction}): arsi={arsi:.1f} пересёк "
                 f"signal={signal_line:.1f} ({'↓' if self._position_direction == 'long' else '↑'})"
             )
 
@@ -436,6 +438,18 @@ class RSIStrategy(BaseStrategy):
     def current_ofi(self) -> Optional[float]:
         """Последнее значение ARSI (аналог OFI для совместимости с PositionManager)."""
         return self._rsi.last_arsi
+
+    def on_stream_reconnect(self) -> None:
+        """Сбросить состояние агрегатора и prev_arsi после переподключения стрима.
+
+        Вызывать при каждом reconnect стрима, чтобы незакрытая свеча не породила
+        фантомный сигнал и prev_arsi не тащил устаревшее значение.
+        Позиция, cooldown и ATR-фильтр при этом сохраняются.
+        """
+        self._aggregator.reset()
+        self._prev_arsi = None
+        self._prev_signal_line = None
+        logger.info(f"[{self.ticker}] Агрегатор и prev_arsi сброшены после реконнекта")
 
     def reset(self) -> None:
         self._rsi.reset()

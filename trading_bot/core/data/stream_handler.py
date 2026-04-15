@@ -9,7 +9,7 @@
 """
 import logging
 import time
-from typing import Any, Callable, Dict
+from typing import Any, Callable, Dict, Optional
 
 from tinkoff.invest import (
     Client,
@@ -43,12 +43,14 @@ class StreamHandler:
         on_trade: Callable[[Dict[str, Any]], None],
         orderbook_depth: int = 10,
         instrument_id: str = "",
+        on_reconnect: Optional[Callable[[], None]] = None,
     ) -> None:
         self.figi = figi
         self.instrument_id = instrument_id
         self._on_orderbook = on_orderbook
         self._on_trade = on_trade
         self.orderbook_depth = orderbook_depth
+        self._on_reconnect = on_reconnect
         self._running = False
 
     def start(self) -> None:
@@ -60,9 +62,13 @@ class StreamHandler:
         self._running = True
         backoff = 1
 
+        first_connect = True
         while self._running:
             try:
                 logger.info(f"Подключение к стриму: figi={self.figi}")
+                if not first_connect and self._on_reconnect is not None:
+                    self._on_reconnect()
+                first_connect = False
                 self._run_stream()
                 backoff = 1
             except Exception as e:

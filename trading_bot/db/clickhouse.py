@@ -309,6 +309,18 @@ def get_writer() -> ClickHouseWriter:
 
 
 def init_clickhouse() -> None:
-    """Инициализировать соединение при старте бота (если CH включён)."""
-    if is_enabled():
+    """Инициализировать соединение при старте бота (если CH включён).
+    При недоступности ClickHouse логирует предупреждение и продолжает работу без CH.
+    """
+    if not is_enabled():
+        return
+    import logging
+    logger = logging.getLogger(__name__)
+    try:
         get_writer()
+        logger.info(f"ClickHouse подключён: {settings.CLICKHOUSE_HOST}:{settings.CLICKHOUSE_PORT}")
+    except Exception as e:
+        logger.warning(
+            f"ClickHouse недоступен ({settings.CLICKHOUSE_HOST}:{settings.CLICKHOUSE_PORT}): {e}. "
+            "Запись рыночных данных в CH отключена."
+        )
