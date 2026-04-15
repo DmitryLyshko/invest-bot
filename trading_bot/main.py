@@ -225,6 +225,39 @@ def make_event_handlers(
     return on_orderbook, on_trade
 
 
+def warmup_rsi_strategy(figi: str, strategy: "RSIStrategy", rsi_params: dict) -> None:
+    """
+    Загрузить исторические 5-минутные свечи и прогреть RSI перед стартом торговли.
+    RMA требует сотен баров для схождения — без прогрева значения расходятся с TradingView.
+    """
+    logger = logging.getLogger(__name__)
+    warmup_candles = rsi_params.get("warmup_candles", 500)
+    # 500 свечей по 5 минут ≈ 41 час = ~5 торговых дней; берём 10 календарных с запасом
+    now = datetime.now(timezone.utc)
+    from_ = now - timedelta(days=10)
+
+    try:
+        ClientClass = SandboxClient if settings.USE_SANDBOX else Client
+        with ClientClass(settings.TINKOFF_TOKEN) as client:
+            resp = client.market_data.get_candles(
+                figi=figi,
+                from_=from_,
+                to=now,
+                interval=CandleInterval.CANDLE_INTERVAL_5_MIN,
+            )
+        candles = [c for c in resp.candles if c.is_complete]
+        if not candles:
+            logger.warning(f"RSI warmup {figi}: нет исторических свечей")
+            return
+
+        candles = candles[-warmup_candles:]
+        closes = [float(quotation_to_decimal(c.close)) for c in candles]
+        strategy.warmup(closes)
+
+    except Exception:
+        logger.exception(f"Ошибка при прогреве RSI для {figi}")
+
+
 def refresh_rsi_atr(figi: str, strategy: "RSIStrategy", rsi_params: dict) -> None:
     """
     Загрузить 5-минутные свечи из T-Invest API и обновить ATR в стратегии.
@@ -385,6 +418,9 @@ def main() -> None:
             portfolio_manager=portfolio_manager,
             notifier=notifier,
         )
+        # Прогреваем RSI на исторических данных до старта стрима
+        warmup_rsi_strategy(params["figi"], rsi_strategy, rsi_params)
+
         recorder_rsi = DataRecorder(figi=params["figi"], instrument_config=params)
         _, on_trade_rsi = make_event_handlers(rsi_strategy, rsi_position_manager, recorder_rsi)
 

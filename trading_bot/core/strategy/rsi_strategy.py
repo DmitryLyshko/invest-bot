@@ -224,6 +224,25 @@ class RSIStrategy(BaseStrategy):
 
     # ── Position state ────────────────────────────────────────────────────────
 
+    def warmup(self, closes: list) -> None:
+        """
+        Прогреть RSI на исторических свечах перед началом торговли.
+        Прогоняет все closes через AugmentedRSI чтобы RMA сошлась
+        и значения совпали с TradingView.
+        После прогрева _prev_arsi содержит arsi последней исторической свечи.
+        """
+        for close in closes:
+            result = self._rsi.update(close)
+            if result is not None:
+                self._prev_arsi, self._prev_signal_line = result
+        if self._rsi.last_arsi is not None:
+            logger.info(
+                f"RSI прогрет на {len(closes)} свечах: "
+                f"arsi={self._rsi.last_arsi:.1f}, signal={self._rsi.last_signal:.1f}"
+            )
+        else:
+            logger.warning(f"RSI прогрев: недостаточно данных ({len(closes)} свечей)")
+
     def update_atr(self, short_atr: float, long_atr: float) -> None:
         """Обновить значения ATR (вызывается из планировщика каждые 5 минут)."""
         self._atr_short = short_atr
