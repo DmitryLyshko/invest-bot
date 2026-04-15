@@ -61,11 +61,11 @@ def api_rsi_data(ticker: str):
     figi = instruments[ticker]["figi"]
 
     # Загружаем исторические свечи из T-Invest API
+    # Лимит API для 5-мин свечей: максимум 1 день за запрос → пагинируем
     days = int(request.args.get("days", 10))
     days = max(1, min(days, 30))
 
     now = datetime.now(timezone.utc)
-    from_ = now - timedelta(days=days)
 
     try:
         from tinkoff.invest import CandleInterval, Client
@@ -73,14 +73,31 @@ def api_rsi_data(ticker: str):
         from tinkoff.invest.utils import quotation_to_decimal
 
         ClientClass = SandboxClient if settings.USE_SANDBOX else Client
+        candles = []
         with ClientClass(settings.TINKOFF_TOKEN) as client:
-            resp = client.market_data.get_candles(
-                figi=figi,
-                from_=from_,
-                to=now,
-                interval=CandleInterval.CANDLE_INTERVAL_5_MIN,
-            )
-        candles = [c for c in resp.candles if c.is_complete]
+            # Запрашиваем по 1 дню (ограничение API для 5-мин интервала)
+            for day_offset in range(days - 1, -1, -1):
+                chunk_to = now - timedelta(days=day_offset)
+                chunk_from = chunk_to - timedelta(days=1)
+                try:
+                    resp = client.market_data.get_candles(
+                        figi=figi,
+                        from_=chunk_from,
+                        to=chunk_to,
+                        interval=CandleInterval.CANDLE_INTERVAL_5_MIN,
+                    )
+                    candles.extend(c for c in resp.candles if c.is_complete)
+                except Exception:
+                    logger.debug(f"Пропуск чанка {chunk_from:%Y-%m-%d} для {ticker}")
+                    continue
+        # Сортируем и дедуплицируем по времени
+        seen = set()
+        unique = []
+        for c in sorted(candles, key=lambda x: x.time):
+            if c.time not in seen:
+                seen.add(c.time)
+                unique.append(c)
+        candles = unique
     except Exception as e:
         logger.exception(f"Ошибка при загрузке свечей для {ticker}")
         return jsonify({"error": str(e)}), 500
