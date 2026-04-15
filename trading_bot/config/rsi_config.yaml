@@ -3,7 +3,7 @@
 # Здесь — только параметры алгоритма RSI и управления рисками.
 
 SBER:
-  length: 9
+  length: 10
   smooth: 5
   smo_type_rsi: RMA
   smo_type_signal: EMA
@@ -14,7 +14,7 @@ SBER:
   take_profit_ticks: 258
   trailing_stop_ticks: 60
   max_position_lots: 100
-  max_hold_minutes: 240
+  max_hold_minutes: 150
   cooldown_seconds: 600
   post_close_cooldown_seconds: 900
   trading_hours:
@@ -29,7 +29,7 @@ SBER:
   atr_ratio_min: 0.7
 
 GMKN:
-  length: 9
+  length: 10
   smooth: 5
   smo_type_rsi: RMA
   smo_type_signal: EMA
@@ -40,7 +40,7 @@ GMKN:
   take_profit_ticks: 177
   trailing_stop_ticks: 40
   max_position_lots: 100
-  max_hold_minutes: 240
+  max_hold_minutes: 150
   cooldown_seconds: 600
   post_close_cooldown_seconds: 900
   trading_hours:
@@ -55,7 +55,7 @@ GMKN:
   atr_ratio_min: 0.7
 
 VTBR:
-  length: 9
+  length: 10
   smooth: 5
   smo_type_rsi: RMA
   smo_type_signal: EMA
@@ -66,7 +66,7 @@ VTBR:
   take_profit_ticks: 366
   trailing_stop_ticks: 84
   max_position_lots: 100
-  max_hold_minutes: 240
+  max_hold_minutes: 150
   cooldown_seconds: 600
   post_close_cooldown_seconds: 900
   trading_hours:
@@ -81,7 +81,7 @@ VTBR:
   atr_ratio_min: 0.7
 
 LKOH:
-  length: 9
+  length: 10
   smooth: 5
   smo_type_rsi: RMA
   smo_type_signal: EMA
@@ -92,7 +92,7 @@ LKOH:
   take_profit_ticks: 255
   trailing_stop_ticks: 60
   max_position_lots: 100
-  max_hold_minutes: 240
+  max_hold_minutes: 150
   cooldown_seconds: 600
   post_close_cooldown_seconds: 900
   trading_hours:
@@ -107,7 +107,7 @@ LKOH:
   atr_ratio_min: 0.7
 
 GAZP:
-  length: 9
+  length: 10
   smooth: 5
   smo_type_rsi: RMA
   smo_type_signal: EMA
@@ -118,7 +118,7 @@ GAZP:
   take_profit_ticks: 285
   trailing_stop_ticks: 66
   max_position_lots: 100
-  max_hold_minutes: 240
+  max_hold_minutes: 150
   cooldown_seconds: 600
   post_close_cooldown_seconds: 900
   trading_hours:
@@ -133,7 +133,7 @@ GAZP:
   atr_ratio_min: 0.7
 
 NVTK:
-  length: 9
+  length: 10
   smooth: 5
   smo_type_rsi: RMA
   smo_type_signal: EMA
@@ -144,7 +144,7 @@ NVTK:
   take_profit_ticks: 180
   trailing_stop_ticks: 42
   max_position_lots: 100
-  max_hold_minutes: 240
+  max_hold_minutes: 150
   cooldown_seconds: 600
   post_close_cooldown_seconds: 900
   trading_hours:
@@ -159,7 +159,7 @@ NVTK:
   atr_ratio_min: 0.7
 
 ROSN:
-  length: 9
+  length: 10
   smooth: 5
   smo_type_rsi: RMA
   smo_type_signal: EMA
@@ -170,7 +170,7 @@ ROSN:
   take_profit_ticks: 240
   trailing_stop_ticks: 56
   max_position_lots: 100
-  max_hold_minutes: 240
+  max_hold_minutes: 150
   cooldown_seconds: 600
   post_close_cooldown_seconds: 900
   trading_hours:
@@ -185,7 +185,7 @@ ROSN:
   atr_ratio_min: 0.7
 
 TATN:
-  length: 9
+  length: 10
   smooth: 5
   smo_type_rsi: RMA
   smo_type_signal: EMA
@@ -196,7 +196,7 @@ TATN:
   take_profit_ticks: 180
   trailing_stop_ticks: 42
   max_position_lots: 100
-  max_hold_minutes: 240
+  max_hold_minutes: 150
   cooldown_seconds: 600
   post_close_cooldown_seconds: 900
   trading_hours:
@@ -211,7 +211,7 @@ TATN:
   atr_ratio_min: 0.7
 
 YNDX:
-  length: 9
+  length: 10
   smooth: 5
   smo_type_rsi: RMA
   smo_type_signal: EMA
@@ -222,7 +222,7 @@ YNDX:
   take_profit_ticks: 180
   trailing_stop_ticks: 42
   max_position_lots: 100
-  max_hold_minutes: 240
+  max_hold_minutes: 150
   cooldown_seconds: 600
   post_close_cooldown_seconds: 900
   trading_hours:
@@ -237,7 +237,7 @@ YNDX:
   atr_ratio_min: 0.7
 
 PLZL:
-  length: 9
+  length: 10
   smooth: 5
   smo_type_rsi: RMA
   smo_type_signal: EMA
@@ -248,7 +248,7 @@ PLZL:
   take_profit_ticks: 240
   trailing_stop_ticks: 56
   max_position_lots: 100
-  max_hold_minutes: 240
+  max_hold_minutes: 150
   cooldown_seconds: 600
   post_close_cooldown_seconds: 900
   trading_hours:
@@ -263,7 +263,7 @@ PLZL:
   atr_ratio_min: 0.7
 
 CHMF:
-  length: 9
+  length: 10
   smooth: 5
   smo_type_rsi: RMA
   smo_type_signal: EMA
@@ -274,7 +274,7 @@ CHMF:
   take_profit_ticks: 195
   trailing_stop_ticks: 46
   max_position_lots: 100
-  max_hold_minutes: 240
+  max_hold_minutes: 150
   cooldown_seconds: 600
   post_close_cooldown_seconds: 900
   trading_hours:
@@ -289,7 +289,7 @@ CHMF:
   atr_ratio_min: 0.7
 
 NLMK:
-  length: 9
+  length: 10
   smooth: 5
   smo_type_rsi: RMA
   smo_type_signal: EMA
@@ -300,7 +300,7 @@ NLMK:
   take_profit_ticks: 270
   trailing_stop_ticks: 64
   max_position_lots: 100
-  max_hold_minutes: 240
+  max_hold_minutes: 150
   cooldown_seconds: 600
   post_close_cooldown_seconds: 900
   trading_hours:
@@ -315,7 +315,7 @@ NLMK:
   atr_ratio_min: 0.7
 
 MAGN:
-  length: 9
+  length: 10
   smooth: 5
   smo_type_rsi: RMA
   smo_type_signal: EMA
@@ -326,7 +326,7 @@ MAGN:
   take_profit_ticks: 300
   trailing_stop_ticks: 70
   max_position_lots: 100
-  max_hold_minutes: 240
+  max_hold_minutes: 150
   cooldown_seconds: 600
   post_close_cooldown_seconds: 900
   trading_hours:
@@ -341,7 +341,7 @@ MAGN:
   atr_ratio_min: 0.7
 
 ALRS:
-  length: 9
+  length: 10
   smooth: 5
   smo_type_rsi: RMA
   smo_type_signal: EMA
@@ -352,7 +352,7 @@ ALRS:
   take_profit_ticks: 270
   trailing_stop_ticks: 64
   max_position_lots: 100
-  max_hold_minutes: 240
+  max_hold_minutes: 150
   cooldown_seconds: 600
   post_close_cooldown_seconds: 900
   trading_hours:
@@ -367,7 +367,7 @@ ALRS:
   atr_ratio_min: 0.7
 
 MTSS:
-  length: 9
+  length: 10
   smooth: 5
   smo_type_rsi: RMA
   smo_type_signal: EMA
@@ -378,7 +378,7 @@ MTSS:
   take_profit_ticks: 240
   trailing_stop_ticks: 56
   max_position_lots: 100
-  max_hold_minutes: 240
+  max_hold_minutes: 150
   cooldown_seconds: 600
   post_close_cooldown_seconds: 900
   trading_hours:
@@ -393,7 +393,7 @@ MTSS:
   atr_ratio_min: 0.7
 
 SIBN:
-  length: 9
+  length: 10
   smooth: 5
   smo_type_rsi: RMA
   smo_type_signal: EMA
@@ -404,7 +404,7 @@ SIBN:
   take_profit_ticks: 240
   trailing_stop_ticks: 56
   max_position_lots: 100
-  max_hold_minutes: 240
+  max_hold_minutes: 150
   cooldown_seconds: 600
   post_close_cooldown_seconds: 900
   trading_hours:
@@ -419,7 +419,7 @@ SIBN:
   atr_ratio_min: 0.7
 
 AFLT:
-  length: 9
+  length: 10
   smooth: 5
   smo_type_rsi: RMA
   smo_type_signal: EMA
@@ -430,7 +430,7 @@ AFLT:
   take_profit_ticks: 240
   trailing_stop_ticks: 56
   max_position_lots: 100
-  max_hold_minutes: 240
+  max_hold_minutes: 150
   cooldown_seconds: 600
   post_close_cooldown_seconds: 900
   trading_hours:
@@ -445,7 +445,7 @@ AFLT:
   atr_ratio_min: 0.7
 
 MGNT:
-  length: 9
+  length: 10
   smooth: 5
   smo_type_rsi: RMA
   smo_type_signal: EMA
@@ -456,7 +456,7 @@ MGNT:
   take_profit_ticks: 150
   trailing_stop_ticks: 36
   max_position_lots: 100
-  max_hold_minutes: 240
+  max_hold_minutes: 150
   cooldown_seconds: 600
   post_close_cooldown_seconds: 900
   trading_hours:
@@ -471,7 +471,7 @@ MGNT:
   atr_ratio_min: 0.7
 
 MOEX:
-  length: 9
+  length: 10
   smooth: 5
   smo_type_rsi: RMA
   smo_type_signal: EMA
@@ -482,7 +482,7 @@ MOEX:
   take_profit_ticks: 195
   trailing_stop_ticks: 46
   max_position_lots: 100
-  max_hold_minutes: 240
+  max_hold_minutes: 150
   cooldown_seconds: 600
   post_close_cooldown_seconds: 900
   trading_hours:
@@ -497,7 +497,7 @@ MOEX:
   atr_ratio_min: 0.7
 
 PHOR:
-  length: 9
+  length: 10
   smooth: 5
   smo_type_rsi: RMA
   smo_type_signal: EMA
@@ -508,7 +508,7 @@ PHOR:
   take_profit_ticks: 210
   trailing_stop_ticks: 50
   max_position_lots: 100
-  max_hold_minutes: 240
+  max_hold_minutes: 150
   cooldown_seconds: 600
   post_close_cooldown_seconds: 900
   trading_hours:
