@@ -400,6 +400,7 @@ get_order_by_broker_id(broker_id)
 
 # Trades
 save_trade(instrument_id, direction, open/close_price, quantity, pnl_rub, commission_rub, open/close_at, exit_reason, ...) → Trade
+delete_trade(trade_id) → bool
 get_today_pnl(instrument_id=None) → float
 get_trades_page(page, per_page, direction, exit_reason, date_from, date_to) → (List, total)
 get_all_trades_for_export(...) → List[Trade]
@@ -487,8 +488,9 @@ GET  /api/account     → {portfolio_value, open_positions, max_positions, max_p
 
 ### `routes/trades.py`  blueprint=`trades`
 ```
-GET /trades         → trades.html  (фильтры: direction, exit_reason, date_from, date_to)
-GET /trades/export  → CSV-файл
+GET  /trades                  → trades.html  (фильтры: direction, exit_reason, date_from, date_to)
+GET  /trades/export           → CSV-файл
+POST /trades/<id>/delete      → удалить сделку, редирект на /trades
 ```
 
 ### `routes/signals.py`  blueprints=`signals`, `stats`

@@ -338,6 +338,17 @@ def get_all_trades_for_export(
         return trades
 
 
+def delete_trade(trade_id: int) -> bool:
+    """Удалить сделку по ID. Возвращает True если запись найдена и удалена."""
+    with get_session() as session:
+        trade = session.query(Trade).filter(Trade.id == trade_id).first()
+        if trade is None:
+            return False
+        session.delete(trade)
+        session.commit()
+        return True
+
+
 def get_strategy_pnl_summary() -> List[dict]:
     """P&L по стратегиям: [{strategy_name, total_pnl, total_trades, win_rate}]."""
     with get_session() as session:

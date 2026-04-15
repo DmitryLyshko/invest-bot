@@ -85,6 +85,7 @@
                     <th>Комис. ₽</th>
                     <th>Удержание</th>
                     <th>Причина выхода</th>
+                    <th></th>
                 </tr>
             </thead>
             <tbody>
@@ -112,9 +113,16 @@
                         {% if mins >= 60 %}{{ mins // 60 }}ч {{ mins % 60 }}м{% else %}{{ mins }}м{% endif %}
                     </td>
                     <td style="color: #718096; font-size: 0.8rem;">{{ t.exit_reason }}</td>
+                    <td>
+                        <form method="POST" action="{{ url_for('trades.delete', trade_id=t.id) }}"
+                              onsubmit="return confirm('Удалить сделку #{{ t.id }}?')">
+                            <button type="submit" class="btn btn-sm"
+                                    style="background: #2d1a1a; color: #fc8181; border: 1px solid #742a2a; padding: 0.15rem 0.5rem;">✕</button>
+                        </form>
+                    </td>
                 </tr>
                 {% else %}
-                <tr><td colspan="12" style="text-align: center; color: #718096; padding: 2rem;">Сделок не найдено</td></tr>
+                <tr><td colspan="13" style="text-align: center; color: #718096; padding: 2rem;">Сделок не найдено</td></tr>
                 {% endfor %}
             </tbody>
         </table>

@@ -5,7 +5,7 @@ import csv
 import io
 from datetime import date
 
-from flask import Blueprint, make_response, render_template, request
+from flask import Blueprint, make_response, redirect, render_template, request, url_for
 from flask_login import login_required
 
 from trading_bot.db import repository
@@ -56,6 +56,14 @@ def index():
         ticker_filter=ticker_filter,
         instruments=instruments,
     )
+
+
+@bp.route("/trades/<int:trade_id>/delete", methods=["POST"])
+@login_required
+def delete(trade_id):
+    repository.delete_trade(trade_id)
+    # сохраняем текущие фильтры при редиректе
+    return redirect(request.referrer or url_for("trades.index"))
 
 
 @bp.route("/trades/export")
