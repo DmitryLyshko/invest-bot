@@ -286,6 +286,8 @@ class RSIStrategy(BaseStrategy):
 
         if self._position_direction is None:
             self._try_entry(arsi, signal_line, now, ob, os_)
+        else:
+            self._try_exit(arsi, signal_line, now)
 
         self._prev_arsi = arsi
         self._prev_signal_line = signal_line
@@ -356,6 +358,44 @@ class RSIStrategy(BaseStrategy):
             self._last_entry_time = now
             logger.info(
                 f"RSI SHORT: arsi={arsi:.1f} пересёк OB {ob:.0f} сверху вниз"
+            )
+
+    def _try_exit(
+        self,
+        arsi: float,
+        signal_line: float,
+        now: datetime,
+    ) -> None:
+        """
+        Проверить условие выхода из позиции по пересечению ARSI и signal line.
+
+        LONG  → EXIT когда arsi пересекает signal line сверху вниз
+                (prev_arsi >= prev_signal_line AND arsi < signal_line)
+        SHORT → EXIT когда arsi пересекает signal line снизу вверх
+                (prev_arsi <= prev_signal_line AND arsi > signal_line)
+        """
+        prev_arsi = self._prev_arsi
+        prev_sig = self._prev_signal_line
+        if prev_arsi is None or prev_sig is None:
+            return
+
+        crossed = False
+        if self._position_direction == "long":
+            crossed = prev_arsi >= prev_sig and arsi < signal_line
+        elif self._position_direction == "short":
+            crossed = prev_arsi <= prev_sig and arsi > signal_line
+
+        if crossed:
+            self._signal = Signal(
+                signal_type=SignalType.EXIT,
+                reason=SignalReason.OFI_REVERSED,
+                ofi_value=arsi,
+                print_volume=signal_line,
+                timestamp=now,
+            )
+            logger.info(
+                f"RSI EXIT ({self._position_direction}): arsi={arsi:.1f} пересёк "
+                f"signal={signal_line:.1f} ({'↓' if self._position_direction == 'long' else '↑'})"
             )
 
     def _is_trading_hours(self, ts: datetime) -> bool:
