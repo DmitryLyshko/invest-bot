@@ -134,9 +134,10 @@ function loadChart() {
     document.getElementById('signals-count').textContent = '';
     document.getElementById('trades-card').style.display = 'none';
 
-    fetch(`/api/rsi-test/${currentTicker}?days=${days}&display=${display}`)
-        .then(r => r.json())
-        .then(data => {
+    Promise.all([
+        fetch(`/api/rsi-test/${currentTicker}?days=${days}&display=${display}`).then(r => r.json()),
+        fetch(`/api/rsi-test/${currentTicker}/diag`).then(r => r.json()).catch(() => null),
+    ]).then(([data, diagData]) => {
             if (data.error) {
                 document.getElementById('loading').style.display = 'none';
                 const em = document.getElementById('error-msg');
@@ -144,7 +145,7 @@ function loadChart() {
                 em.style.display = 'flex';
                 return;
             }
-            renderChart(data);
+            renderChart(data, diagData);
             renderInfoPanel(data);
             renderSignalsTable(data);
             renderTrades(data);
@@ -157,7 +158,24 @@ function loadChart() {
         });
 }
 
-function renderChart(data) {
+function findNearestChartPoint(tsIso, chartTimestamps, chartArsi, labels) {
+    // Возвращает {x: label, y: arsi} для ближайшего candle к заданному timestamp
+    const target = new Date(tsIso).getTime();
+    let bestIdx = -1, bestDiff = Infinity;
+    for (let i = 0; i < chartTimestamps.length; i++) {
+        const diff = Math.abs(new Date(chartTimestamps[i]).getTime() - target);
+        if (diff < bestDiff) {
+            bestDiff = diff;
+            bestIdx = i;
+        }
+    }
+    if (bestIdx === -1 || chartArsi[bestIdx] === null) return null;
+    // Не показываем если сигнал далеко за пределами диапазона графика (>15 мин)
+    if (bestDiff > 15 * 60 * 1000) return null;
+    return {x: labels[bestIdx], y: chartArsi[bestIdx]};
+}
+
+function renderChart(data, diagData) {
     document.getElementById('loading').style.display = 'none';
     const canvas = document.getElementById('rsi-chart');
     canvas.style.display = 'block';
@@ -166,6 +184,20 @@ function renderChart(data) {
         const d = new Date(t);
         return d.toLocaleString('ru', {month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'});
     });
+
+    // Сигналы из БД (реальные)
+    const dbLongActed = [], dbShortActed = [], dbLongBlocked = [], dbShortBlocked = [];
+    if (diagData && diagData.recent_signals) {
+        for (const s of diagData.recent_signals) {
+            const pt = findNearestChartPoint(s.created_at, data.timestamps, data.arsi, labels);
+            if (!pt) continue;
+            if (s.type === 'long') {
+                (s.acted_on ? dbLongActed : dbLongBlocked).push({...pt, _ts: s.created_at});
+            } else if (s.type === 'short') {
+                (s.acted_on ? dbShortActed : dbShortBlocked).push({...pt, _ts: s.created_at});
+            }
+        }
+    }
 
     // Сигналы: разбивка по типу и статусу
     const longSignals = data.signals
@@ -298,6 +330,50 @@ function renderChart(data) {
                     pointRadius: 5,
                     order: 1,
                 },
+                {
+                    label: '★ DB LONG (реал)',
+                    type: 'scatter',
+                    data: dbLongActed,
+                    backgroundColor: '#00ff88',
+                    borderColor: '#00cc66',
+                    borderWidth: 2,
+                    pointStyle: 'star',
+                    pointRadius: 11,
+                    order: 0,
+                },
+                {
+                    label: '★ DB SHORT (реал)',
+                    type: 'scatter',
+                    data: dbShortActed,
+                    backgroundColor: '#ff4466',
+                    borderColor: '#cc2244',
+                    borderWidth: 2,
+                    pointStyle: 'star',
+                    pointRadius: 11,
+                    order: 0,
+                },
+                {
+                    label: '✕ DB LONG (блок)',
+                    type: 'scatter',
+                    data: dbLongBlocked,
+                    backgroundColor: 'rgba(0,255,136,0.25)',
+                    borderColor: 'rgba(0,204,102,0.5)',
+                    borderWidth: 1,
+                    pointStyle: 'crossRot',
+                    pointRadius: 7,
+                    order: 1,
+                },
+                {
+                    label: '✕ DB SHORT (блок)',
+                    type: 'scatter',
+                    data: dbShortBlocked,
+                    backgroundColor: 'rgba(255,68,102,0.25)',
+                    borderColor: 'rgba(204,34,68,0.5)',
+                    borderWidth: 1,
+                    pointStyle: 'crossRot',
+                    pointRadius: 7,
+                    order: 1,
+                },
             ]
         },
         options: {
@@ -318,6 +394,19 @@ function renderChart(data) {
                     borderWidth: 1,
                     titleColor: '#e2e8f0',
                     bodyColor: '#a0aec0',
+                    callbacks: {
+                        label: function(ctx) {
+                            const raw = ctx.raw;
+                            let base = `${ctx.dataset.label}: ${typeof raw === 'object' && raw !== null ? raw.y : raw}`;
+                            if (raw && raw._ts) {
+                                const d = new Date(raw._ts);
+                                const msk = new Date(d.getTime() + 3*3600*1000);
+                                const fmt = msk.toISOString().replace('T',' ').slice(0,16);
+                                base += ` (БД: ${fmt} МСК)`;
+                            }
+                            return base;
+                        }
+                    }
                 }
             },
             scales: {

@@ -631,6 +631,7 @@ class RSIStrategy(BaseStrategy):
 **Выход:** только через stop-loss / take-profit / trailing-stop / timeout (PositionManager). Выход по signal line — отключён.
 
 **Прогрев при старте:** `warmup_rsi_strategy()` в `main.py` загружает последние `warmup_candles` (default 500) 5-минутных свечей из API и прогоняет через `AugmentedRSI.update()`. Без прогрева RMA не сходится и значения расходятся с TradingView.
+⚠️ **T-Invest API ограничение:** для `CANDLE_INTERVAL_5_MIN` максимум 1 день за запрос. `warmup_rsi_strategy` пагинирует по 1 дню за 14 календарных дней (аналогично `/rsi-test`). Без пагинации бот получает только ~78 свечей → RMA не сходится → неправильные ARSI-значения → ложные сигналы.
 
 **ATR-фильтр активности:** каждые 5 минут `refresh_rsi_atr()` загружает свечи за `atr_days` дней, считает `short_atr` (последние N свечей) и `long_atr` (среднее за все дни). Если `short_atr / long_atr < atr_ratio_min` — рынок неактивен, вход заблокирован.
 
@@ -677,6 +678,7 @@ strategy_state: strategy_name (PK), is_active (bool), updated_at
 | bot_active флаг | `bot_state.bot_active` в БД | переключается через `POST /api/bot/toggle` |
 | strategy_name тег | `signals.strategy_name`, `trades.strategy_name` | `'combo'` или `'rsi'`; NULL у старых записей → трактуется как `'combo'` |
 | Включение стратегий | `strategy_state.is_active` в БД | `POST /api/strategies/<name>/toggle`; блокирует только новые входы |
+| RSI warmup — пагинация | `warmup_rsi_strategy()` в `main.py` | API лимит: 1 день за запрос для 5-мин свечей; запрашивает 14 дней по 1 дню; без этого ARSI расходится с TradingView и бот открывает ложные сделки |
 | RSI и Combo — разные потоки | по одному `stream_thread` на каждую стратегию/тикер | потоки изолированы, один `PositionManager` на поток |
 | RSI — торговые часы | `trading_hours: start: '10:05', end: '22:00'` | новые входы разрешены 10:05-22:00 МСК (дневная + вечерняя сессия MOEX); вне окна `RiskManager` отказывает |
 | RSI — принудительное EOD-закрытие | `eod_close_time: '23:30'` в `rsi_config.yaml` | `check_eod_close()` вызывается планировщиком каждую минуту; если есть открытая позиция и МСК ≥ 23:30 — принудительно закрывает с `exit_reason='eod_close'`. Обходит RiskManager (напрямую через `_close_position`) |
