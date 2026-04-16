@@ -49,8 +49,8 @@ def _compute_metrics(trades: List[Dict]) -> Dict[str, Any]:
         }
 
     n = len(trades)
-    wins = [t for t in trades if t["exit_reason"] in ("take_profit", "trailing_stop")]
-    losses = [t for t in trades if t["exit_reason"] not in ("take_profit", "trailing_stop")]
+    wins = [t for t in trades if t["pnl_rub"] > 0]
+    losses = [t for t in trades if t["pnl_rub"] <= 0]
 
     gross_profit = sum(t["pnl_rub"] for t in wins)
     gross_loss = abs(sum(t["pnl_rub"] for t in losses))

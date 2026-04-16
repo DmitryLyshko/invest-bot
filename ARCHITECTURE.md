@@ -152,6 +152,7 @@ SBER:
 
 Тикеры в yaml (20 штук): SBER, GMKN, VTBR, LKOH, GAZP, NVTK, ROSN, TATN, YNDX, PLZL,
 CHMF, NLMK, MAGN, ALRS, MTSS, SIBN, AFLT, MGNT, MOEX, PHOR.
+RSI активны только 17 (ALRS/MOEX/MTSS убраны из rsi_config.yaml).
 
 ---
 
@@ -541,8 +542,8 @@ GET  /api/optimize/results            → [{ticker, current_pf, best_pf, best_tr
 GET  /api/optimize/results/<ticker>   → {current_params, current_metrics, top_configs, ...}  (детали)
 POST /api/optimize/apply/<ticker>     → {ok, applied_params}  (записать в rsi_config.yaml)
 ```
-Применяет только: ob_value, os_value, stop_ticks, take_profit_ticks, trailing_stop_ticks,
-breakeven_ticks, atr_ratio_min. Остальные параметры не трогает.
+Применяет: ob_value, os_value, stop_ticks, take_profit_ticks, trailing_stop_ticks,
+breakeven_ticks, atr_ratio_min, entry_margin, signal_mode. Остальные параметры не трогает.
 Запуск бэктеста — фоновый daemon-поток (`threading.Thread`). Прогресс отслеживается polling'ом каждые 1.5с.
 Результаты кэшируются в памяти (`_results: dict[ticker, dict]`) до следующего запуска или рестарта Flask.
 При повторном запуске кэш перезаписывается.
@@ -656,7 +657,9 @@ class RSIStrategy(BaseStrategy):
 `arsi = rma(diff)/rma(|diff|) * 50 + 50`  диапазон [0, 100]
 `signal = ema(arsi, smooth)`
 
-**Входы:** arsi пересекает os_value снизу вверх → LONG; ob_value сверху вниз → SHORT.
+**Входы (mean_reversion, default):** arsi пересекает os_value снизу вверх → LONG; ob_value сверху вниз → SHORT.
+**Входы (trend):** arsi пересекает ob_value снизу вверх → LONG (рост подтверждён); os_value сверху вниз → SHORT (падение подтверждено).
+`signal_mode` берётся из `rsi_config.yaml`. Режим задаётся per-тикер, оптимизируется через grid search.
 **Выход:** только через stop-loss / take-profit / trailing-stop / timeout (PositionManager). Выход по signal line — отключён.
 
 **Прогрев при старте:** `warmup_rsi_strategy()` в `main.py` загружает последние `warmup_candles` (default 500) 5-минутных свечей из API и прогоняет через `AugmentedRSI.update()`. Без прогрева RMA не сходится и значения расходятся с TradingView.
@@ -671,8 +674,15 @@ class RSIStrategy(BaseStrategy):
 `max_position_lots`, `max_hold_minutes`, `cooldown_seconds`, `post_close_cooldown_seconds`,
 `trading_hours`, `skip_first_minutes`, `min_hold_seconds`,
 `atr_days` (default 5), `atr_length_short` (default 5), `atr_ratio_min` (default 0 = выкл),
-`warmup_candles` (default 500).
+`warmup_candles` (default 500),
+`entry_margin` (default 10.0) — допуск фантомных пересечений: если ARSI ушёл дальше уровня на entry_margin пунктов — сигнал отклоняется,
+`signal_mode` (`mean_reversion` | `trend`, default `mean_reversion`) — режим сигнала (см. ниже).
 figi / instrument_id / lot_size / tick_size / commission_rate берутся из `instruments.yaml`.
+
+Активные RSI-тикеры (17): SBER, GMKN, VTBR, LKOH, GAZP, NVTK, ROSN, TATN, YNDX, PLZL,
+CHMF, NLMK, MAGN, SIBN, AFLT, MGNT, PHOR.
+Отключены (нет прибыльной конфигурации): ALRS, MOEX, MTSS — убраны из rsi_config.yaml,
+остаются в instruments.yaml для Combo-стратегии.
 
 ### Новые поля БД
 ```
