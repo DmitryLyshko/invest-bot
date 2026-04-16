@@ -30,6 +30,13 @@
       <input type="number" id="inp-min-trades" value="10" min="5" max="50"
              style="width: 80px; margin-top: 0.3rem;">
     </div>
+    <div>
+      <label>Режим сигнала</label><br>
+      <select id="sel-signal-mode" style="min-width: 175px; margin-top: 0.3rem;">
+        <option value="mean_reversion">Mean Reversion (OB/OS выход)</option>
+        <option value="trend">Trend (OB/OS вход)</option>
+      </select>
+    </div>
     <div style="align-self: flex-end;">
       <button class="btn btn-primary" id="btn-run" onclick="startOptimize()">
         &#9654; Запустить оптимизацию
@@ -66,7 +73,15 @@
   <div class="card" style="margin-bottom: 1.25rem;">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
       <div class="section-title" style="margin: 0;">Результаты оптимизации</div>
-      <div id="summary-meta" style="font-size: 0.75rem; color: #718096;"></div>
+      <div style="display: flex; align-items: center; gap: 1rem;">
+        <div id="summary-meta" style="font-size: 0.75rem; color: #718096;"></div>
+        <a href="/api/optimize/export.csv"
+           class="btn btn-sm"
+           style="background:#2d3748; color:#e2e8f0; border:1px solid #4a5568; text-decoration:none;"
+           title="Скачать CSV со всеми конфигами (rank=0 — текущий, rank=1..10 — найденные)">
+          &#8595; CSV
+        </a>
+      </div>
     </div>
     <div class="table-wrap">
       <table id="summary-table">
@@ -176,10 +191,11 @@ function startOptimize() {
   document.getElementById('progress-wrap').style.display = '';
   setProgress(0, 0, null, 0, 0, 'Инициализация...');
 
+  const signalMode = document.getElementById('sel-signal-mode').value;
   fetch('/api/optimize/run', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({tickers: tickers === 'all' ? 'all' : tickers, days, min_trades: minTrades})
+    body: JSON.stringify({tickers: tickers === 'all' ? 'all' : tickers, days, min_trades: minTrades, signal_mode: signalMode})
   })
   .then(r => r.json())
   .then(data => {

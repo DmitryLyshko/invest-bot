@@ -41,7 +41,7 @@ def _load_instruments_config() -> dict:
         return yaml.safe_load(f) or {}
 
 
-def _run_job(job_id: str, tickers: list, days: int, min_trades: int) -> None:
+def _run_job(job_id: str, tickers: list, days: int, min_trades: int, signal_mode: str) -> None:
     """Фоновый поток: загружает свечи, считает базовые метрики, запускает grid search."""
     from trading_bot.backtest.candle_loader import load_candles
     from trading_bot.backtest.engine import run_backtest
@@ -100,12 +100,14 @@ def _run_job(job_id: str, tickers: list, days: int, min_trades: int) -> None:
                 warmup_candles=warmup,
                 progress_cb=_progress,
                 min_trades=min_trades,
+                signal_mode=signal_mode,
             )
 
             with _results_lock:
                 _results[ticker] = {
                     "ticker": ticker,
                     "days": days,
+                    "signal_mode": signal_mode,
                     "current_metrics": current_bt["metrics"],
                     "current_params": {
                         "ob_value":            rsi_params.get("ob_value", 80.0),
@@ -179,9 +181,13 @@ def run():
         "error": None,
     }
 
+    signal_mode = data.get("signal_mode", "mean_reversion")
+    if signal_mode not in ("mean_reversion", "trend"):
+        signal_mode = "mean_reversion"
+
     threading.Thread(
         target=_run_job,
-        args=(job_id, tickers, days, min_trades),
+        args=(job_id, tickers, days, min_trades, signal_mode),
         daemon=True,
         name=f"optimize_{job_id}",
     ).start()
@@ -246,6 +252,105 @@ def ticker_result(ticker: str):
     if res is None:
         return jsonify({"error": f"Нет результатов для {ticker}"}), 404
     return jsonify(res)
+
+
+@bp.route("/api/optimize/export.csv")
+@login_required
+def export_csv():
+    """
+    CSV со всеми найденными конфигами по всем тикерам.
+    Структура: один ряд = один конфиг из top_configs.
+    Текущий конфиг идёт отдельной строкой с rank=0 для сравнения.
+    """
+    import csv
+    import io
+
+    FIELDNAMES = [
+        "ticker", "signal_mode", "days", "rank",
+        "ob_value", "os_value",
+        "stop_ticks", "take_profit_ticks", "trailing_stop_ticks", "breakeven_ticks",
+        "atr_ratio_min",
+        "n_trades", "win_rate", "total_pnl", "profit_factor",
+        "max_drawdown", "avg_hold_candles",
+        "exit_stop_loss", "exit_take_profit", "exit_trailing_stop",
+        "exit_breakeven_stop", "exit_timeout", "exit_eod_close", "exit_other",
+    ]
+
+    def _exit_counts(exit_reasons: dict) -> dict:
+        known = {"stop_loss", "take_profit", "trailing_stop",
+                 "breakeven_stop", "timeout", "eod_close"}
+        other = sum(v for k, v in exit_reasons.items() if k not in known)
+        return {
+            "exit_stop_loss":      exit_reasons.get("stop_loss", 0),
+            "exit_take_profit":    exit_reasons.get("take_profit", 0),
+            "exit_trailing_stop":  exit_reasons.get("trailing_stop", 0),
+            "exit_breakeven_stop": exit_reasons.get("breakeven_stop", 0),
+            "exit_timeout":        exit_reasons.get("timeout", 0),
+            "exit_eod_close":      exit_reasons.get("eod_close", 0),
+            "exit_other":          other,
+        }
+
+    buf = io.StringIO()
+    writer = csv.DictWriter(buf, fieldnames=FIELDNAMES, lineterminator="\n")
+    writer.writeheader()
+
+    with _results_lock:
+        snapshot = dict(_results)
+
+    for ticker, res in sorted(snapshot.items()):
+        if "error" in res:
+            continue
+
+        signal_mode = res.get("signal_mode", "mean_reversion")
+        days = res.get("days", 0)
+        cp = res.get("current_params", {})
+        cm = res.get("current_metrics", {})
+
+        # rank=0 — текущий конфиг (для сравнения)
+        row = {"ticker": ticker, "signal_mode": signal_mode, "days": days, "rank": 0}
+        row.update({k: cp.get(k, "") for k in
+                    ("ob_value", "os_value", "stop_ticks", "take_profit_ticks",
+                     "trailing_stop_ticks", "breakeven_ticks", "atr_ratio_min")})
+        row.update({
+            "n_trades":        cm.get("n_trades", 0),
+            "win_rate":        cm.get("win_rate", 0.0),
+            "total_pnl":       cm.get("total_pnl", 0.0),
+            "profit_factor":   cm.get("profit_factor", 0.0),
+            "max_drawdown":    cm.get("max_drawdown", 0.0),
+            "avg_hold_candles": cm.get("avg_hold_candles", 0.0),
+        })
+        row.update(_exit_counts(cm.get("exit_reasons", {})))
+        writer.writerow(row)
+
+        # rank=1..N — найденные конфиги
+        for rank, cfg in enumerate(res.get("top_configs", []), start=1):
+            p = cfg["params"]
+            m = cfg["metrics"]
+            row = {"ticker": ticker, "signal_mode": signal_mode, "days": days, "rank": rank}
+            row.update({k: p.get(k, "") for k in
+                        ("ob_value", "os_value", "stop_ticks", "take_profit_ticks",
+                         "trailing_stop_ticks", "breakeven_ticks", "atr_ratio_min")})
+            row.update({
+                "n_trades":        m.get("n_trades", 0),
+                "win_rate":        m.get("win_rate", 0.0),
+                "total_pnl":       m.get("total_pnl", 0.0),
+                "profit_factor":   m.get("profit_factor", 0.0),
+                "max_drawdown":    m.get("max_drawdown", 0.0),
+                "avg_hold_candles": m.get("avg_hold_candles", 0.0),
+            })
+            row.update(_exit_counts(m.get("exit_reasons", {})))
+            writer.writerow(row)
+
+    from datetime import datetime, timezone
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M")
+    filename = f"optimize_{ts}.csv"
+
+    from flask import Response
+    return Response(
+        buf.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
 
 
 @bp.route("/api/optimize/apply/<ticker>", methods=["POST"])

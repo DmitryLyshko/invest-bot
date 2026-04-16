@@ -45,6 +45,7 @@ def optimize_ticker(
     grid: Optional[Dict] = None,
     progress_cb: Optional[Callable[[int, int], None]] = None,
     min_trades: int = MIN_TRADES_DEFAULT,
+    signal_mode: str = "mean_reversion",
 ) -> List[Dict]:
     """
     Перебор параметров RSI-стратегии по сетке.
@@ -99,6 +100,7 @@ def optimize_ticker(
         params["trailing_stop_ticks"] = trail
         params["breakeven_ticks"]     = breakeven
         params["atr_ratio_min"]       = p["atr_ratio_min"]
+        params["signal_mode"]         = signal_mode
 
         try:
             bt = run_backtest(

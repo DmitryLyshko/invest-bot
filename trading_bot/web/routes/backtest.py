@@ -44,8 +44,10 @@ def _load_instruments_config() -> dict:
         return yaml.safe_load(f) or {}
 
 
-def _run_job(job_id: str, tickers: list, days: int) -> None:
+def _run_job(job_id: str, tickers: list, days: int, signal_mode: str) -> None:
     """Фоновый поток: прогоняет бэктест по каждому тикеру последовательно."""
+    from copy import deepcopy
+
     from trading_bot.backtest.candle_loader import load_candles
     from trading_bot.backtest.engine import run_backtest
 
@@ -63,7 +65,8 @@ def _run_job(job_id: str, tickers: list, days: int) -> None:
             logger.warning(f"[backtest] {ticker} не найден в конфиге, пропуск")
             continue
 
-        rsi_params = rsi_cfg[ticker]
+        rsi_params = deepcopy(rsi_cfg[ticker])
+        rsi_params["signal_mode"] = signal_mode  # override из UI
         instr = instr_cfg[ticker]
         instr_params = {
             "ticker": ticker,
@@ -124,6 +127,9 @@ def run():
     data = request.get_json(force=True, silent=True) or {}
     days = int(data.get("days", 60))
     days = max(7, min(days, 180))
+    signal_mode = data.get("signal_mode", "mean_reversion")
+    if signal_mode not in ("mean_reversion", "trend"):
+        signal_mode = "mean_reversion"
 
     rsi_cfg = _load_rsi_config()
     all_tickers = sorted(rsi_cfg.keys())
@@ -148,13 +154,12 @@ def run():
         "error": None,
     }
 
-    t = threading.Thread(
+    threading.Thread(
         target=_run_job,
-        args=(job_id, tickers, days),
+        args=(job_id, tickers, days, signal_mode),
         daemon=True,
         name=f"backtest_{job_id}",
-    )
-    t.start()
+    ).start()
 
     return jsonify({"job_id": job_id, "total": len(tickers)})
 
