@@ -17,14 +17,16 @@ DEFAULT_GRID: Dict[str, List] = {
     "ob_value":        [75.0, 80.0, 85.0, 90.0],  # уровень перекупленности
     "os_value":        [10.0, 15.0, 20.0, 25.0],  # уровень перепроданности
     "stop_mult":       [0.7,  1.0,  1.4],          # × текущий stop_ticks
-    "take_ratio":      [2.0,  3.0,  4.0],          # × stop_ticks
-    "trail_ratio":     [0.0,  0.7],                # × stop_ticks (0 = трейлинг выкл)
-    "breakeven_ratio": [0.0,  0.5,  0.85],         # × stop_ticks (0 = без breakeven)
+    "take_ratio":      [1.0,  1.5,  2.0],          # × stop_ticks (3-4 недостижимы)
+    "trail_ratio":     [0.0],                      # трейлинг выкл (режет позиции в минус)
+    "breakeven_ratio": [0.0,  0.5],                # × stop_ticks (0.85 ≈ 0.5 на практике)
     "atr_ratio_min":   [0.0,  0.5,  0.7],          # порог ATR-фильтра
-    "max_hold_minutes":[60,   90,   150],           # максимальное время удержания
+    "max_hold_minutes":[90,   150],                # 60 слишком мало
+    "entry_margin":    [3.0,  5.0,  10.0],         # макс отклонение ARSI (0 = хуже)
+    "signal_mode":     ["mean_reversion", "trend"], # режим сигнала
 }
 
-MIN_TRADES_DEFAULT = 10   # минимум сделок для учёта результата
+MIN_TRADES_DEFAULT = 40   # минимум сделок для учёта результата
 TOP_N = 10                # сколько лучших конфигов хранить
 
 
@@ -105,7 +107,8 @@ def optimize_ticker(
         params["breakeven_ticks"]     = breakeven
         params["atr_ratio_min"]       = p["atr_ratio_min"]
         params["max_hold_minutes"]    = max_hold
-        params["signal_mode"]         = signal_mode
+        params["entry_margin"]        = p.get("entry_margin", 0.0)
+        params["signal_mode"]         = p.get("signal_mode", signal_mode)
 
         try:
             bt = run_backtest(
@@ -132,6 +135,8 @@ def optimize_ticker(
                 "breakeven_ticks":     breakeven,
                 "atr_ratio_min":       p["atr_ratio_min"],
                 "max_hold_minutes":    max_hold,
+                "entry_margin":        p.get("entry_margin", 0.0),
+                "signal_mode":         p.get("signal_mode", signal_mode),
             },
             "metrics": m,
         })

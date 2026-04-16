@@ -326,7 +326,7 @@ def export_csv():
         for rank, cfg in enumerate(res.get("top_configs", []), start=1):
             p = cfg["params"]
             m = cfg["metrics"]
-            row = {"ticker": ticker, "signal_mode": signal_mode, "days": days, "rank": rank}
+            row = {"ticker": ticker, "signal_mode": p.get("signal_mode", signal_mode), "days": days, "rank": rank}
             row.update({k: p.get(k, "") for k in
                         ("ob_value", "os_value", "stop_ticks", "take_profit_ticks",
                          "trailing_stop_ticks", "breakeven_ticks", "atr_ratio_min", "max_hold_minutes")})
@@ -390,7 +390,7 @@ def apply_config(ticker: str):
     OPTIMIZED_KEYS = [
         "ob_value", "os_value",
         "stop_ticks", "take_profit_ticks", "trailing_stop_ticks", "breakeven_ticks",
-        "atr_ratio_min", "max_hold_minutes",
+        "atr_ratio_min", "max_hold_minutes", "entry_margin", "signal_mode",
     ]
     for key in OPTIMIZED_KEYS:
         if key in new_params:

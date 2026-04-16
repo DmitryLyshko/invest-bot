@@ -7,12 +7,12 @@ SBER:
   smooth: 5
   smo_type_rsi: RMA
   smo_type_signal: EMA
-  ob_value: 80.0
-  os_value: 20.0
+  ob_value: 85.0
+  os_value: 10.0
   stop_ticks: 86
-  breakeven_ticks: 73
-  take_profit_ticks: 258
-  trailing_stop_ticks: 60
+  breakeven_ticks: 0
+  take_profit_ticks: 129
+  trailing_stop_ticks: 0
   max_position_lots: 100
   max_hold_minutes: 150
   cooldown_seconds: 600
@@ -25,7 +25,8 @@ SBER:
   min_hold_seconds: 300
   atr_days: 5
   atr_length_short: 5
-  atr_ratio_min: 0.7
+  atr_ratio_min: 0.5
+  entry_margin: 5.0
 
 GMKN:
   length: 10
