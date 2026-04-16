@@ -269,7 +269,7 @@ def export_csv():
         "ticker", "signal_mode", "days", "rank",
         "ob_value", "os_value",
         "stop_ticks", "take_profit_ticks", "trailing_stop_ticks", "breakeven_ticks",
-        "atr_ratio_min",
+        "atr_ratio_min", "max_hold_minutes",
         "n_trades", "win_rate", "total_pnl", "profit_factor",
         "max_drawdown", "avg_hold_candles",
         "exit_stop_loss", "exit_take_profit", "exit_trailing_stop",
@@ -310,7 +310,7 @@ def export_csv():
         row = {"ticker": ticker, "signal_mode": signal_mode, "days": days, "rank": 0}
         row.update({k: cp.get(k, "") for k in
                     ("ob_value", "os_value", "stop_ticks", "take_profit_ticks",
-                     "trailing_stop_ticks", "breakeven_ticks", "atr_ratio_min")})
+                     "trailing_stop_ticks", "breakeven_ticks", "atr_ratio_min", "max_hold_minutes")})
         row.update({
             "n_trades":        cm.get("n_trades", 0),
             "win_rate":        cm.get("win_rate", 0.0),
@@ -329,7 +329,7 @@ def export_csv():
             row = {"ticker": ticker, "signal_mode": signal_mode, "days": days, "rank": rank}
             row.update({k: p.get(k, "") for k in
                         ("ob_value", "os_value", "stop_ticks", "take_profit_ticks",
-                         "trailing_stop_ticks", "breakeven_ticks", "atr_ratio_min")})
+                         "trailing_stop_ticks", "breakeven_ticks", "atr_ratio_min", "max_hold_minutes")})
             row.update({
                 "n_trades":        m.get("n_trades", 0),
                 "win_rate":        m.get("win_rate", 0.0),
@@ -390,7 +390,7 @@ def apply_config(ticker: str):
     OPTIMIZED_KEYS = [
         "ob_value", "os_value",
         "stop_ticks", "take_profit_ticks", "trailing_stop_ticks", "breakeven_ticks",
-        "atr_ratio_min",
+        "atr_ratio_min", "max_hold_minutes",
     ]
     for key in OPTIMIZED_KEYS:
         if key in new_params:

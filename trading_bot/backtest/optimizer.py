@@ -14,12 +14,14 @@ logger = logging.getLogger(__name__)
 
 # ── Сетка перебора ────────────────────────────────────────────────────────────
 DEFAULT_GRID: Dict[str, List] = {
-    "ob_value":      [75.0, 80.0, 85.0],   # уровень перекупленности
-    "os_value":      [15.0, 20.0, 25.0],   # уровень перепроданности
-    "stop_mult":     [0.7,  1.0,  1.4],    # × текущий stop_ticks
-    "take_ratio":    [2.0,  3.0,  4.0],    # × stop_ticks
-    "trail_ratio":   [0.0,  0.5,  0.7],    # × stop_ticks (0 = трейлинг выкл)
-    "atr_ratio_min": [0.0,  0.5,  0.7],    # порог ATR-фильтра
+    "ob_value":        [75.0, 80.0, 85.0, 90.0],  # уровень перекупленности
+    "os_value":        [10.0, 15.0, 20.0, 25.0],  # уровень перепроданности
+    "stop_mult":       [0.7,  1.0,  1.4],          # × текущий stop_ticks
+    "take_ratio":      [2.0,  3.0,  4.0],          # × stop_ticks
+    "trail_ratio":     [0.0,  0.7],                # × stop_ticks (0 = трейлинг выкл)
+    "breakeven_ratio": [0.0,  0.5,  0.85],         # × stop_ticks (0 = без breakeven)
+    "atr_ratio_min":   [0.0,  0.5,  0.7],          # порог ATR-фильтра
+    "max_hold_minutes":[60,   90,   150],           # максимальное время удержания
 }
 
 MIN_TRADES_DEFAULT = 10   # минимум сделок для учёта результата
@@ -86,11 +88,13 @@ def optimize_ticker(
         if p["os_value"] >= p["ob_value"]:
             continue
 
+        # trail и breakeven взаимоисключающие: если trail > 0, breakeven = 0
         stop = max(5, round(base_stop * p["stop_mult"]))
         take = round(stop * p["take_ratio"]) if p["take_ratio"] > 0 else 0
-        trail = round(stop * p["trail_ratio"]) if p["trail_ratio"] > 0 else 0
-        # breakeven актуален только когда трейлинг выкл
-        breakeven = round(stop * 0.85) if trail == 0 and stop > 5 else 0
+        trail = round(stop * p["trail_ratio"]) if p.get("trail_ratio", 0) > 0 else 0
+        be_ratio = p.get("breakeven_ratio", 0.85)
+        breakeven = round(stop * be_ratio) if trail == 0 and be_ratio > 0 and stop > 5 else 0
+        max_hold = int(p.get("max_hold_minutes", rsi_params_base.get("max_hold_minutes", 150)))
 
         params = deepcopy(rsi_params_base)
         params["ob_value"]            = p["ob_value"]
@@ -100,6 +104,7 @@ def optimize_ticker(
         params["trailing_stop_ticks"] = trail
         params["breakeven_ticks"]     = breakeven
         params["atr_ratio_min"]       = p["atr_ratio_min"]
+        params["max_hold_minutes"]    = max_hold
         params["signal_mode"]         = signal_mode
 
         try:
@@ -126,6 +131,7 @@ def optimize_ticker(
                 "trailing_stop_ticks": trail,
                 "breakeven_ticks":     breakeven,
                 "atr_ratio_min":       p["atr_ratio_min"],
+                "max_hold_minutes":    max_hold,
             },
             "metrics": m,
         })
