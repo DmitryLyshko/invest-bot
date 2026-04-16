@@ -1,17 +1,46 @@
 # Конфигурация стратегии Ultimate RSI (LuxAlgo) на 5-минутных свечах.
 # figi / instrument_id / lot_size / commission_rate / tick_size берутся из instruments.yaml.
 # Здесь — только параметры алгоритма RSI и управления рисками.
+# Параметры ob_value/os_value/stop_ticks/take_profit_ticks/breakeven_ticks/atr_ratio_min/
+# max_hold_minutes/entry_margin/signal_mode обновлены оптимизатором 16.04.2026.
 
 SBER:
   length: 10
   smooth: 5
   smo_type_rsi: RMA
   smo_type_signal: EMA
-  ob_value: 85.0
-  os_value: 10.0
-  stop_ticks: 86
+  ob_value: 80.0
+  os_value: 20.0
+  stop_ticks: 120
   breakeven_ticks: 0
-  take_profit_ticks: 129
+  take_profit_ticks: 240
+  trailing_stop_ticks: 0
+  max_position_lots: 100
+  max_hold_minutes: 150
+  cooldown_seconds: 600
+  post_close_cooldown_seconds: 900
+  trading_hours:
+    start: '10:05'
+    end: '18:40'
+  eod_close_time: '23:30'
+  skip_first_minutes: 5
+  min_hold_seconds: 300
+  atr_days: 5
+  atr_length_short: 5
+  atr_ratio_min: 0.7
+  entry_margin: 10.0
+  signal_mode: mean_reversion
+
+GMKN:
+  length: 10
+  smooth: 5
+  smo_type_rsi: RMA
+  smo_type_signal: EMA
+  ob_value: 75.0
+  os_value: 25.0
+  stop_ticks: 59
+  breakeven_ticks: 0
+  take_profit_ticks: 118
   trailing_stop_ticks: 0
   max_position_lots: 100
   max_hold_minutes: 150
@@ -26,32 +55,8 @@ SBER:
   atr_days: 5
   atr_length_short: 5
   atr_ratio_min: 0.5
-  entry_margin: 5.0
-
-GMKN:
-  length: 10
-  smooth: 5
-  smo_type_rsi: RMA
-  smo_type_signal: EMA
-  ob_value: 80.0
-  os_value: 20.0
-  stop_ticks: 59
-  breakeven_ticks: 50
-  take_profit_ticks: 177
-  trailing_stop_ticks: 40
-  max_position_lots: 100
-  max_hold_minutes: 150
-  cooldown_seconds: 600
-  post_close_cooldown_seconds: 900
-  trading_hours:
-    start: '10:05'
-    end: '18:40'
-  eod_close_time: '23:30'
-  skip_first_minutes: 5
-  min_hold_seconds: 300
-  atr_days: 5
-  atr_length_short: 5
-  atr_ratio_min: 0.7
+  entry_margin: 3.0
+  signal_mode: trend
 
 VTBR:
   length: 10
@@ -59,11 +64,11 @@ VTBR:
   smo_type_rsi: RMA
   smo_type_signal: EMA
   ob_value: 80.0
-  os_value: 20.0
-  stop_ticks: 122
-  breakeven_ticks: 104
-  take_profit_ticks: 366
-  trailing_stop_ticks: 84
+  os_value: 25.0
+  stop_ticks: 85
+  breakeven_ticks: 42
+  take_profit_ticks: 170
+  trailing_stop_ticks: 0
   max_position_lots: 100
   max_hold_minutes: 150
   cooldown_seconds: 600
@@ -76,21 +81,23 @@ VTBR:
   min_hold_seconds: 300
   atr_days: 5
   atr_length_short: 5
-  atr_ratio_min: 0.7
+  atr_ratio_min: 0.5
+  entry_margin: 3.0
+  signal_mode: mean_reversion
 
 LKOH:
   length: 10
   smooth: 5
   smo_type_rsi: RMA
   smo_type_signal: EMA
-  ob_value: 80.0
-  os_value: 20.0
-  stop_ticks: 85
-  breakeven_ticks: 72
-  take_profit_ticks: 255
-  trailing_stop_ticks: 60
+  ob_value: 75.0
+  os_value: 25.0
+  stop_ticks: 119
+  breakeven_ticks: 0
+  take_profit_ticks: 238
+  trailing_stop_ticks: 0
   max_position_lots: 100
-  max_hold_minutes: 150
+  max_hold_minutes: 90
   cooldown_seconds: 600
   post_close_cooldown_seconds: 900
   trading_hours:
@@ -102,6 +109,8 @@ LKOH:
   atr_days: 5
   atr_length_short: 5
   atr_ratio_min: 0.7
+  entry_margin: 5.0
+  signal_mode: trend
 
 GAZP:
   length: 10
@@ -109,11 +118,11 @@ GAZP:
   smo_type_rsi: RMA
   smo_type_signal: EMA
   ob_value: 80.0
-  os_value: 20.0
-  stop_ticks: 95
-  breakeven_ticks: 81
-  take_profit_ticks: 285
-  trailing_stop_ticks: 66
+  os_value: 15.0
+  stop_ticks: 133
+  breakeven_ticks: 66
+  take_profit_ticks: 200
+  trailing_stop_ticks: 0
   max_position_lots: 100
   max_hold_minutes: 150
   cooldown_seconds: 600
@@ -126,7 +135,9 @@ GAZP:
   min_hold_seconds: 300
   atr_days: 5
   atr_length_short: 5
-  atr_ratio_min: 0.7
+  atr_ratio_min: 0.0
+  entry_margin: 5.0
+  signal_mode: mean_reversion
 
 NVTK:
   length: 10
@@ -134,11 +145,11 @@ NVTK:
   smo_type_rsi: RMA
   smo_type_signal: EMA
   ob_value: 80.0
-  os_value: 20.0
-  stop_ticks: 60
-  breakeven_ticks: 51
-  take_profit_ticks: 180
-  trailing_stop_ticks: 42
+  os_value: 10.0
+  stop_ticks: 42
+  breakeven_ticks: 0
+  take_profit_ticks: 63
+  trailing_stop_ticks: 0
   max_position_lots: 100
   max_hold_minutes: 150
   cooldown_seconds: 600
@@ -151,19 +162,21 @@ NVTK:
   min_hold_seconds: 300
   atr_days: 5
   atr_length_short: 5
-  atr_ratio_min: 0.7
+  atr_ratio_min: 0.0
+  entry_margin: 10.0
+  signal_mode: mean_reversion
 
 ROSN:
   length: 10
   smooth: 5
   smo_type_rsi: RMA
   smo_type_signal: EMA
-  ob_value: 80.0
-  os_value: 20.0
+  ob_value: 90.0
+  os_value: 25.0
   stop_ticks: 80
-  breakeven_ticks: 68
-  take_profit_ticks: 240
-  trailing_stop_ticks: 56
+  breakeven_ticks: 0
+  take_profit_ticks: 160
+  trailing_stop_ticks: 0
   max_position_lots: 100
   max_hold_minutes: 150
   cooldown_seconds: 600
@@ -176,7 +189,9 @@ ROSN:
   min_hold_seconds: 300
   atr_days: 5
   atr_length_short: 5
-  atr_ratio_min: 0.7
+  atr_ratio_min: 0.0
+  entry_margin: 10.0
+  signal_mode: trend
 
 TATN:
   length: 10
@@ -184,11 +199,11 @@ TATN:
   smo_type_rsi: RMA
   smo_type_signal: EMA
   ob_value: 80.0
-  os_value: 20.0
+  os_value: 25.0
   stop_ticks: 60
-  breakeven_ticks: 51
-  take_profit_ticks: 180
-  trailing_stop_ticks: 42
+  breakeven_ticks: 30
+  take_profit_ticks: 90
+  trailing_stop_ticks: 0
   max_position_lots: 100
   max_hold_minutes: 150
   cooldown_seconds: 600
@@ -201,7 +216,9 @@ TATN:
   min_hold_seconds: 300
   atr_days: 5
   atr_length_short: 5
-  atr_ratio_min: 0.7
+  atr_ratio_min: 0.0
+  entry_margin: 10.0
+  signal_mode: trend
 
 YNDX:
   length: 10
@@ -233,14 +250,14 @@ PLZL:
   smooth: 5
   smo_type_rsi: RMA
   smo_type_signal: EMA
-  ob_value: 80.0
+  ob_value: 90.0
   os_value: 20.0
   stop_ticks: 80
-  breakeven_ticks: 68
-  take_profit_ticks: 240
-  trailing_stop_ticks: 56
+  breakeven_ticks: 0
+  take_profit_ticks: 160
+  trailing_stop_ticks: 0
   max_position_lots: 100
-  max_hold_minutes: 150
+  max_hold_minutes: 90
   cooldown_seconds: 600
   post_close_cooldown_seconds: 900
   trading_hours:
@@ -251,7 +268,9 @@ PLZL:
   min_hold_seconds: 300
   atr_days: 5
   atr_length_short: 5
-  atr_ratio_min: 0.7
+  atr_ratio_min: 0.0
+  entry_margin: 10.0
+  signal_mode: trend
 
 CHMF:
   length: 10
@@ -259,11 +278,11 @@ CHMF:
   smo_type_rsi: RMA
   smo_type_signal: EMA
   ob_value: 80.0
-  os_value: 20.0
-  stop_ticks: 65
-  breakeven_ticks: 55
-  take_profit_ticks: 195
-  trailing_stop_ticks: 46
+  os_value: 25.0
+  stop_ticks: 46
+  breakeven_ticks: 0
+  take_profit_ticks: 69
+  trailing_stop_ticks: 0
   max_position_lots: 100
   max_hold_minutes: 150
   cooldown_seconds: 600
@@ -277,18 +296,20 @@ CHMF:
   atr_days: 5
   atr_length_short: 5
   atr_ratio_min: 0.7
+  entry_margin: 5.0
+  signal_mode: mean_reversion
 
 NLMK:
   length: 10
   smooth: 5
   smo_type_rsi: RMA
   smo_type_signal: EMA
-  ob_value: 80.0
+  ob_value: 85.0
   os_value: 20.0
-  stop_ticks: 90
-  breakeven_ticks: 77
-  take_profit_ticks: 270
-  trailing_stop_ticks: 64
+  stop_ticks: 63
+  breakeven_ticks: 32
+  take_profit_ticks: 63
+  trailing_stop_ticks: 0
   max_position_lots: 100
   max_hold_minutes: 150
   cooldown_seconds: 600
@@ -301,7 +322,9 @@ NLMK:
   min_hold_seconds: 300
   atr_days: 5
   atr_length_short: 5
-  atr_ratio_min: 0.7
+  atr_ratio_min: 0.0
+  entry_margin: 10.0
+  signal_mode: trend
 
 MAGN:
   length: 10
@@ -311,9 +334,9 @@ MAGN:
   ob_value: 80.0
   os_value: 20.0
   stop_ticks: 100
-  breakeven_ticks: 85
-  take_profit_ticks: 300
-  trailing_stop_ticks: 70
+  breakeven_ticks: 50
+  take_profit_ticks: 100
+  trailing_stop_ticks: 0
   max_position_lots: 100
   max_hold_minutes: 150
   cooldown_seconds: 600
@@ -326,57 +349,9 @@ MAGN:
   min_hold_seconds: 300
   atr_days: 5
   atr_length_short: 5
-  atr_ratio_min: 0.7
-
-ALRS:
-  length: 10
-  smooth: 5
-  smo_type_rsi: RMA
-  smo_type_signal: EMA
-  ob_value: 80.0
-  os_value: 20.0
-  stop_ticks: 90
-  breakeven_ticks: 77
-  take_profit_ticks: 270
-  trailing_stop_ticks: 64
-  max_position_lots: 100
-  max_hold_minutes: 150
-  cooldown_seconds: 600
-  post_close_cooldown_seconds: 900
-  trading_hours:
-    start: '10:05'
-    end: '18:40'
-  eod_close_time: '23:30'
-  skip_first_minutes: 5
-  min_hold_seconds: 300
-  atr_days: 5
-  atr_length_short: 5
-  atr_ratio_min: 0.7
-
-MTSS:
-  length: 10
-  smooth: 5
-  smo_type_rsi: RMA
-  smo_type_signal: EMA
-  ob_value: 80.0
-  os_value: 20.0
-  stop_ticks: 80
-  breakeven_ticks: 68
-  take_profit_ticks: 240
-  trailing_stop_ticks: 56
-  max_position_lots: 100
-  max_hold_minutes: 150
-  cooldown_seconds: 600
-  post_close_cooldown_seconds: 900
-  trading_hours:
-    start: '10:05'
-    end: '18:40'
-  eod_close_time: '23:30'
-  skip_first_minutes: 5
-  min_hold_seconds: 300
-  atr_days: 5
-  atr_length_short: 5
-  atr_ratio_min: 0.7
+  atr_ratio_min: 0.0
+  entry_margin: 5.0
+  signal_mode: trend
 
 SIBN:
   length: 10
@@ -409,11 +384,11 @@ AFLT:
   smo_type_rsi: RMA
   smo_type_signal: EMA
   ob_value: 80.0
-  os_value: 20.0
-  stop_ticks: 80
-  breakeven_ticks: 68
-  take_profit_ticks: 240
-  trailing_stop_ticks: 56
+  os_value: 15.0
+  stop_ticks: 56
+  breakeven_ticks: 0
+  take_profit_ticks: 56
+  trailing_stop_ticks: 0
   max_position_lots: 100
   max_hold_minutes: 150
   cooldown_seconds: 600
@@ -426,19 +401,21 @@ AFLT:
   min_hold_seconds: 300
   atr_days: 5
   atr_length_short: 5
-  atr_ratio_min: 0.7
+  atr_ratio_min: 0.0
+  entry_margin: 10.0
+  signal_mode: mean_reversion
 
 MGNT:
   length: 10
   smooth: 5
   smo_type_rsi: RMA
   smo_type_signal: EMA
-  ob_value: 80.0
-  os_value: 20.0
-  stop_ticks: 50
-  breakeven_ticks: 43
-  take_profit_ticks: 150
-  trailing_stop_ticks: 36
+  ob_value: 85.0
+  os_value: 25.0
+  stop_ticks: 35
+  breakeven_ticks: 18
+  take_profit_ticks: 52
+  trailing_stop_ticks: 0
   max_position_lots: 100
   max_hold_minutes: 150
   cooldown_seconds: 600
@@ -452,45 +429,22 @@ MGNT:
   atr_days: 5
   atr_length_short: 5
   atr_ratio_min: 0.7
-
-MOEX:
-  length: 10
-  smooth: 5
-  smo_type_rsi: RMA
-  smo_type_signal: EMA
-  ob_value: 80.0
-  os_value: 20.0
-  stop_ticks: 65
-  breakeven_ticks: 55
-  take_profit_ticks: 195
-  trailing_stop_ticks: 46
-  max_position_lots: 100
-  max_hold_minutes: 150
-  cooldown_seconds: 600
-  post_close_cooldown_seconds: 900
-  trading_hours:
-    start: '10:05'
-    end: '18:40'
-  eod_close_time: '23:30'
-  skip_first_minutes: 5
-  min_hold_seconds: 300
-  atr_days: 5
-  atr_length_short: 5
-  atr_ratio_min: 0.7
+  entry_margin: 10.0
+  signal_mode: trend
 
 PHOR:
   length: 10
   smooth: 5
   smo_type_rsi: RMA
   smo_type_signal: EMA
-  ob_value: 80.0
-  os_value: 20.0
-  stop_ticks: 70
-  breakeven_ticks: 60
-  take_profit_ticks: 210
-  trailing_stop_ticks: 50
+  ob_value: 90.0
+  os_value: 25.0
+  stop_ticks: 98
+  breakeven_ticks: 0
+  take_profit_ticks: 196
+  trailing_stop_ticks: 0
   max_position_lots: 100
-  max_hold_minutes: 150
+  max_hold_minutes: 90
   cooldown_seconds: 600
   post_close_cooldown_seconds: 900
   trading_hours:
@@ -501,4 +455,6 @@ PHOR:
   min_hold_seconds: 300
   atr_days: 5
   atr_length_short: 5
-  atr_ratio_min: 0.7
+  atr_ratio_min: 0.0
+  entry_margin: 10.0
+  signal_mode: trend

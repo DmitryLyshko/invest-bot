@@ -41,7 +41,7 @@ def _load_instruments_config() -> dict:
         return yaml.safe_load(f) or {}
 
 
-def _run_job(job_id: str, tickers: list, days: int, min_trades: int, signal_mode: str) -> None:
+def _run_job(job_id: str, tickers: list, days: int, min_trades: int) -> None:
     """Фоновый поток: загружает свечи, считает базовые метрики, запускает grid search."""
     from trading_bot.backtest.candle_loader import load_candles
     from trading_bot.backtest.engine import run_backtest
@@ -100,14 +100,12 @@ def _run_job(job_id: str, tickers: list, days: int, min_trades: int, signal_mode
                 warmup_candles=warmup,
                 progress_cb=_progress,
                 min_trades=min_trades,
-                signal_mode=signal_mode,
             )
 
             with _results_lock:
                 _results[ticker] = {
                     "ticker": ticker,
                     "days": days,
-                    "signal_mode": signal_mode,
                     "current_metrics": current_bt["metrics"],
                     "current_params": {
                         "ob_value":            rsi_params.get("ob_value", 80.0),
@@ -181,13 +179,9 @@ def run():
         "error": None,
     }
 
-    signal_mode = data.get("signal_mode", "mean_reversion")
-    if signal_mode not in ("mean_reversion", "trend"):
-        signal_mode = "mean_reversion"
-
     threading.Thread(
         target=_run_job,
-        args=(job_id, tickers, days, min_trades, signal_mode),
+        args=(job_id, tickers, days, min_trades),
         daemon=True,
         name=f"optimize_{job_id}",
     ).start()

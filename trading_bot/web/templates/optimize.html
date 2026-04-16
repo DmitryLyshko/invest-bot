@@ -30,13 +30,7 @@
       <input type="number" id="inp-min-trades" value="10" min="5" max="50"
              style="width: 80px; margin-top: 0.3rem;">
     </div>
-    <div>
-      <label>Режим сигнала</label><br>
-      <select id="sel-signal-mode" style="min-width: 175px; margin-top: 0.3rem;">
-        <option value="mean_reversion">Mean Reversion (OB/OS выход)</option>
-        <option value="trend">Trend (OB/OS вход)</option>
-      </select>
-    </div>
+
     <div style="align-self: flex-end;">
       <button class="btn btn-primary" id="btn-run" onclick="startOptimize()">
         &#9654; Запустить оптимизацию
@@ -191,11 +185,11 @@ function startOptimize() {
   document.getElementById('progress-wrap').style.display = '';
   setProgress(0, 0, null, 0, 0, 'Инициализация...');
 
-  const signalMode = document.getElementById('sel-signal-mode').value;
+
   fetch('/api/optimize/run', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({tickers: tickers === 'all' ? 'all' : tickers, days, min_trades: minTrades, signal_mode: signalMode})
+    body: JSON.stringify({tickers: tickers === 'all' ? 'all' : tickers, days, min_trades: minTrades})
   })
   .then(r => r.json())
   .then(data => {

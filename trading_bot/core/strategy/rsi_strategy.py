@@ -338,46 +338,91 @@ class RSIStrategy(BaseStrategy):
         # если arsi слишком далеко ушёл от уровня — пересечение было не здесь,
         # а в промежутке между историческими данными и живым стримом.
         entry_margin = self.params.get("entry_margin", 10.0)
+        signal_mode = self.params.get("signal_mode", "mean_reversion")
 
-        # LONG: arsi пересекает os_ снизу вверх
-        if prev < os_ and arsi >= os_:
-            if arsi > os_ + entry_margin:
-                logger.info(
-                    f"[{self.ticker}] RSI LONG заблокирован: arsi={arsi:.1f} слишком далеко от OS {os_:.0f} "
-                    f"(допуск {entry_margin:.0f}) — фантомное пересечение при старте"
-                )
-            else:
-                self._signal = Signal(
-                    signal_type=SignalType.LONG,
-                    reason=SignalReason.COMBO_TRIGGERED,
-                    ofi_value=arsi,
-                    print_volume=signal_line,
-                    timestamp=now,
-                )
-                self._last_entry_time = now
-                logger.info(
-                    f"[{self.ticker}] RSI LONG: arsi={arsi:.1f} пересёк OS {os_:.0f} снизу вверх"
-                )
+        if signal_mode == "trend":
+            # Трендовый: входим по направлению подтверждённого движения
+            # LONG: arsi пересекает ob_ снизу вверх (рост подтверждён)
+            if prev < ob and arsi >= ob:
+                if arsi > ob + entry_margin:
+                    logger.info(
+                        f"[{self.ticker}] RSI LONG заблокирован: arsi={arsi:.1f} слишком далеко от OB {ob:.0f} "
+                        f"(допуск {entry_margin:.0f}) — фантомное пересечение при старте"
+                    )
+                else:
+                    self._signal = Signal(
+                        signal_type=SignalType.LONG,
+                        reason=SignalReason.COMBO_TRIGGERED,
+                        ofi_value=arsi,
+                        print_volume=signal_line,
+                        timestamp=now,
+                    )
+                    self._last_entry_time = now
+                    logger.info(
+                        f"[{self.ticker}] RSI LONG (trend): arsi={arsi:.1f} пересёк OB {ob:.0f} снизу вверх"
+                    )
 
-        # SHORT: arsi пересекает ob_ сверху вниз
-        elif prev > ob and arsi <= ob:
-            if arsi < ob - entry_margin:
-                logger.info(
-                    f"[{self.ticker}] RSI SHORT заблокирован: arsi={arsi:.1f} слишком далеко от OB {ob:.0f} "
-                    f"(допуск {entry_margin:.0f}) — фантомное пересечение при старте"
-                )
-            else:
-                self._signal = Signal(
-                    signal_type=SignalType.SHORT,
-                    reason=SignalReason.COMBO_TRIGGERED,
-                    ofi_value=arsi,
-                    print_volume=signal_line,
-                    timestamp=now,
-                )
-                self._last_entry_time = now
-                logger.info(
-                    f"[{self.ticker}] RSI SHORT: arsi={arsi:.1f} пересёк OB {ob:.0f} сверху вниз"
-                )
+            # SHORT: arsi пересекает os_ сверху вниз (падение подтверждено)
+            elif prev > os_ and arsi <= os_:
+                if arsi < os_ - entry_margin:
+                    logger.info(
+                        f"[{self.ticker}] RSI SHORT заблокирован: arsi={arsi:.1f} слишком далеко от OS {os_:.0f} "
+                        f"(допуск {entry_margin:.0f}) — фантомное пересечение при старте"
+                    )
+                else:
+                    self._signal = Signal(
+                        signal_type=SignalType.SHORT,
+                        reason=SignalReason.COMBO_TRIGGERED,
+                        ofi_value=arsi,
+                        print_volume=signal_line,
+                        timestamp=now,
+                    )
+                    self._last_entry_time = now
+                    logger.info(
+                        f"[{self.ticker}] RSI SHORT (trend): arsi={arsi:.1f} пересёк OS {os_:.0f} сверху вниз"
+                    )
+
+        else:
+            # Mean-reversion (по умолчанию): входим против исчерпанного движения
+            # LONG: arsi пересекает os_ снизу вверх
+            if prev < os_ and arsi >= os_:
+                if arsi > os_ + entry_margin:
+                    logger.info(
+                        f"[{self.ticker}] RSI LONG заблокирован: arsi={arsi:.1f} слишком далеко от OS {os_:.0f} "
+                        f"(допуск {entry_margin:.0f}) — фантомное пересечение при старте"
+                    )
+                else:
+                    self._signal = Signal(
+                        signal_type=SignalType.LONG,
+                        reason=SignalReason.COMBO_TRIGGERED,
+                        ofi_value=arsi,
+                        print_volume=signal_line,
+                        timestamp=now,
+                    )
+                    self._last_entry_time = now
+                    logger.info(
+                        f"[{self.ticker}] RSI LONG: arsi={arsi:.1f} пересёк OS {os_:.0f} снизу вверх"
+                    )
+
+            # SHORT: arsi пересекает ob_ сверху вниз
+            elif prev > ob and arsi <= ob:
+                if arsi < ob - entry_margin:
+                    logger.info(
+                        f"[{self.ticker}] RSI SHORT заблокирован: arsi={arsi:.1f} слишком далеко от OB {ob:.0f} "
+                        f"(допуск {entry_margin:.0f}) — фантомное пересечение при старте"
+                    )
+                else:
+                    self._signal = Signal(
+                        signal_type=SignalType.SHORT,
+                        reason=SignalReason.COMBO_TRIGGERED,
+                        ofi_value=arsi,
+                        print_volume=signal_line,
+                        timestamp=now,
+                    )
+                    self._last_entry_time = now
+                    logger.info(
+                        f"[{self.ticker}] RSI SHORT: arsi={arsi:.1f} пересёк OB {ob:.0f} сверху вниз"
+                    )
 
     def _try_exit(
         self,
