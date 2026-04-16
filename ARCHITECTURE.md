@@ -10,6 +10,9 @@
 ```
 invest-bot/
 ├── trading_bot/          # Основной пакет
+│   ├── backtest/         # Бэктест RSI-стратегии на исторических свечах
+│   │   ├── candle_loader.py   # Загрузка 5-мин свечей из T-Invest API + дисковый кэш
+│   │   └── engine.py          # Ядро бэктеста: ARSI + OHLC-симулятор → результат
 │   ├── config/           # Настройки и конфиг инструментов
 │   ├── core/             # Бизнес-логика (стратегия, исполнение, данные, риск)
 │   ├── db/               # MySQL-модели, репозиторий, ClickHouse-клиент
@@ -23,6 +26,7 @@ invest-bot/
 ├── migrate_to_clickhouse.py      # Разовый скрипт миграции MySQL → ClickHouse
 ├── fetch_instruments.py          # Утилита: получить figi/instrument_id из T-Invest API
 ├── calibrate_multipliers.py      # Ежедневная авто-калибровка print_multiplier (cron 01:00)
+├── backtest_rsi.py               # CLI бэктест: --ticker SBER --days 60 | --all --days 90
 ├── requirements.txt
 ├── .env.example
 ├── README.md

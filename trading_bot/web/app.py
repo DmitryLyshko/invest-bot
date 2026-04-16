@@ -91,6 +91,7 @@ def create_app() -> Flask:
     from trading_bot.web.routes.instruments import bp as instruments_bp
     from trading_bot.web.routes.strategies import bp as strategies_bp
     from trading_bot.web.routes.rsi_test import bp as rsi_test_bp
+    from trading_bot.web.routes.backtest import bp as backtest_bp
 
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(trades_bp)
@@ -99,6 +100,7 @@ def create_app() -> Flask:
     app.register_blueprint(instruments_bp)
     app.register_blueprint(strategies_bp)
     app.register_blueprint(rsi_test_bp)
+    app.register_blueprint(backtest_bp)
 
     # ── Error handlers ─────────────────────────────────────────────────────────
     @app.errorhandler(403)

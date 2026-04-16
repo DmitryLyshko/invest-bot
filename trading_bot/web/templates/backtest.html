@@ -1,0 +1,380 @@
+{% extends "base.html" %}
+{% block title %}Бэктест RSI — Trading Bot{% endblock %}
+
+{% block content %}
+<h1 class="page-title">Бэктест RSI-стратегии</h1>
+
+<!-- ── Панель управления ──────────────────────────────────────────────────── -->
+<div class="card" style="margin-bottom: 1.25rem;">
+  <div class="form-row" style="margin-bottom: 0;">
+    <div>
+      <label>Тикеры</label><br>
+      <select id="sel-tickers" style="min-width: 160px; margin-top: 0.3rem;">
+        <option value="all">Все ({{ tickers|length }})</option>
+        {% for t in tickers %}
+        <option value="{{ t }}">{{ t }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label>Период</label><br>
+      <select id="sel-days" style="width: 100px; margin-top: 0.3rem;">
+        <option value="14">14 дней</option>
+        <option value="30">30 дней</option>
+        <option value="60" selected>60 дней</option>
+        <option value="90">90 дней</option>
+        <option value="180">180 дней</option>
+      </select>
+    </div>
+    <div style="align-self: flex-end;">
+      <button class="btn btn-primary" id="btn-run" onclick="startBacktest()">
+        ▶ Запустить бэктест
+      </button>
+    </div>
+    <div id="run-info" style="align-self: flex-end; font-size: 0.8rem; color: #718096; display: none;">
+      PnL указан на 1 лот (для сравнения стратегий)
+    </div>
+  </div>
+
+  <!-- Прогресс -->
+  <div id="progress-wrap" style="display: none; margin-top: 1rem;">
+    <div style="display: flex; justify-content: space-between; margin-bottom: 0.4rem; font-size: 0.8rem; color: #a0aec0;">
+      <span id="progress-label">Запуск...</span>
+      <span id="progress-pct">0%</span>
+    </div>
+    <div style="background: #2d3748; border-radius: 4px; height: 6px; overflow: hidden;">
+      <div id="progress-bar" style="background: #4299e1; height: 100%; width: 0%; transition: width 0.3s;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Сводная таблица ────────────────────────────────────────────────────── -->
+<div id="summary-section" style="{{ 'display:none' if not has_results else '' }}">
+  <div class="card" style="margin-bottom: 1.25rem;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+      <div class="section-title" style="margin: 0;">Результаты по тикерам</div>
+      <div id="summary-meta" style="font-size: 0.75rem; color: #718096;"></div>
+    </div>
+    <div class="table-wrap">
+      <table id="summary-table">
+        <thead>
+          <tr>
+            <th style="cursor:pointer;" onclick="sortTable('ticker')">Тикер ↕</th>
+            <th style="cursor:pointer; text-align:right;" onclick="sortTable('n_trades')">Сделок ↕</th>
+            <th style="cursor:pointer; text-align:right;" onclick="sortTable('win_rate')">Win% ↕</th>
+            <th style="cursor:pointer; text-align:right;" onclick="sortTable('total_pnl')">PnL/лот ₽ ↕</th>
+            <th style="cursor:pointer; text-align:right;" onclick="sortTable('profit_factor')">PF ↕</th>
+            <th style="cursor:pointer; text-align:right;" onclick="sortTable('max_drawdown')">MaxDD ₽ ↕</th>
+            <th style="cursor:pointer; text-align:right;" onclick="sortTable('avg_hold_candles')">Avg Hold ↕</th>
+            <th style="text-align:right;">Статус</th>
+          </tr>
+        </thead>
+        <tbody id="summary-body"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ── Детали по тикеру ───────────────────────────────────────────────────── -->
+<div id="detail-section" style="display: none;">
+  <div class="card" style="margin-bottom: 1.25rem;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+      <div style="font-size: 1rem; font-weight: 700; color: #fff;" id="detail-title">—</div>
+      <div style="font-size: 0.75rem; color: #718096;" id="detail-meta"></div>
+    </div>
+
+    <!-- KPI карточки -->
+    <div class="grid grid-4" style="margin-bottom: 1.25rem;" id="detail-kpis"></div>
+
+    <!-- Equity curve -->
+    <div style="margin-bottom: 1.25rem;">
+      <div class="section-title">Кривая доходности (₽/лот накопленно)</div>
+      <div style="position: relative; height: 220px;">
+        <canvas id="equity-chart"></canvas>
+      </div>
+    </div>
+
+    <!-- Exit reasons -->
+    <div style="margin-bottom: 1.25rem;" id="exit-reasons-wrap">
+      <div class="section-title">Причины закрытия</div>
+      <div id="exit-reasons" style="display: flex; gap: 1rem; flex-wrap: wrap;"></div>
+    </div>
+
+    <!-- Trades table -->
+    <div>
+      <div class="section-title" id="trades-title">Сделки</div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Направление</th>
+              <th>Вход (МСК)</th>
+              <th>Выход (МСК)</th>
+              <th style="text-align:right;">Цена вх.</th>
+              <th style="text-align:right;">Цена вых.</th>
+              <th>Причина</th>
+              <th style="text-align:right;">Hold</th>
+              <th style="text-align:right;">P&L ₽</th>
+            </tr>
+          </thead>
+          <tbody id="trades-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ── State ────────────────────────────────────────────────────────────────────
+let summaryData = [];
+let sortKey = 'ticker';
+let sortAsc = true;
+let pollTimer = null;
+let equityChart = null;
+
+// ── Backtest launch ──────────────────────────────────────────────────────────
+function startBacktest() {
+  const tickers = document.getElementById('sel-tickers').value;
+  const days = parseInt(document.getElementById('sel-days').value);
+  document.getElementById('btn-run').disabled = true;
+  document.getElementById('btn-run').textContent = '⏳ Запуск...';
+  document.getElementById('progress-wrap').style.display = '';
+  document.getElementById('run-info').style.display = '';
+  setProgress(0, 0, 'Инициализация...');
+
+  fetch('/api/backtest/run', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({tickers: tickers === 'all' ? 'all' : tickers, days})
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.error) { alert(data.error); resetBtn(); return; }
+    pollStatus(data.job_id, data.total);
+  })
+  .catch(e => { alert('Ошибка запуска: ' + e); resetBtn(); });
+}
+
+function pollStatus(jobId, total) {
+  pollTimer = setInterval(() => {
+    fetch('/api/backtest/status/' + jobId)
+      .then(r => r.json())
+      .then(job => {
+        setProgress(job.progress, job.total || total, job.current_ticker);
+        if (job.status === 'done') {
+          clearInterval(pollTimer);
+          loadResults();
+          resetBtn();
+        } else if (job.status === 'error') {
+          clearInterval(pollTimer);
+          alert('Ошибка: ' + job.error);
+          resetBtn();
+        }
+      })
+      .catch(() => {});
+  }, 1500);
+}
+
+function setProgress(done, total, ticker) {
+  const pct = total > 0 ? Math.round(done / total * 100) : 0;
+  document.getElementById('progress-bar').style.width = pct + '%';
+  document.getElementById('progress-pct').textContent = pct + '%';
+  document.getElementById('progress-label').textContent =
+    ticker ? `Обрабатывается: ${ticker} (${done}/${total})` : `Завершено (${done}/${total})`;
+}
+
+function resetBtn() {
+  document.getElementById('btn-run').disabled = false;
+  document.getElementById('btn-run').textContent = '▶ Запустить бэктест';
+}
+
+// ── Load & render summary ────────────────────────────────────────────────────
+function loadResults() {
+  fetch('/api/backtest/results')
+    .then(r => r.json())
+    .then(data => {
+      summaryData = data;
+      document.getElementById('summary-section').style.display = '';
+      renderSummary();
+    });
+}
+
+function sortTable(key) {
+  if (sortKey === key) sortAsc = !sortAsc;
+  else { sortKey = key; sortAsc = key === 'ticker'; }
+  renderSummary();
+}
+
+function renderSummary() {
+  const rows = [...summaryData].sort((a, b) => {
+    let av = a[sortKey] ?? 0, bv = b[sortKey] ?? 0;
+    if (typeof av === 'string') return sortAsc ? av.localeCompare(bv) : bv.localeCompare(av);
+    return sortAsc ? av - bv : bv - av;
+  });
+
+  const meta = rows.length > 0 ? rows[0].run_at : '';
+  document.getElementById('summary-meta').textContent = meta ? 'Запуск: ' + meta : '';
+
+  const tbody = document.getElementById('summary-body');
+  tbody.innerHTML = '';
+  rows.forEach(r => {
+    if (r.error) {
+      tbody.innerHTML += `<tr>
+        <td><b>${r.ticker}</b></td>
+        <td colspan="7" style="color:#fc8181; font-size:0.8rem;">${r.error}</td>
+      </tr>`;
+      return;
+    }
+    const pnlColor = r.total_pnl >= 0 ? '#68d391' : '#fc8181';
+    const pfColor = r.profit_factor >= 1 ? '#68d391' : '#fc8181';
+    const ok = r.profit_factor >= 1 && r.n_trades >= 5;
+    tbody.innerHTML += `<tr style="cursor:pointer;" onclick="loadDetail('${r.ticker}')">
+      <td><b>${r.ticker}</b></td>
+      <td style="text-align:right;">${r.n_trades}</td>
+      <td style="text-align:right; color:${r.win_rate >= 50 ? '#68d391' : '#fc8181'}">${r.win_rate}%</td>
+      <td style="text-align:right; color:${pnlColor}; font-weight:600;">${r.total_pnl >= 0 ? '+' : ''}${r.total_pnl.toFixed(2)}</td>
+      <td style="text-align:right; color:${pfColor}; font-weight:600;">${r.profit_factor.toFixed(2)}</td>
+      <td style="text-align:right; color:#fc8181;">${r.max_drawdown.toFixed(2)}</td>
+      <td style="text-align:right;">${r.avg_hold_candles.toFixed(1)} св.</td>
+      <td style="text-align:right;">${ok ? '<span class="badge badge-yes">✓</span>' : '<span class="badge badge-no">✗</span>'}</td>
+    </tr>`;
+  });
+}
+
+// ── Load detail ──────────────────────────────────────────────────────────────
+function loadDetail(ticker) {
+  fetch('/api/backtest/results/' + ticker)
+    .then(r => r.json())
+    .then(res => {
+      if (res.error) { alert(res.error); return; }
+      renderDetail(res);
+      document.getElementById('detail-section').style.display = '';
+      document.getElementById('detail-section').scrollIntoView({behavior: 'smooth', block: 'start'});
+    });
+}
+
+function renderDetail(res) {
+  const m = res.metrics;
+  document.getElementById('detail-title').textContent =
+    `${res.ticker} — ${res.days} дней (${res.candles_used} свечей после прогрева)`;
+  document.getElementById('detail-meta').textContent = 'Запуск: ' + (res.run_at || '');
+
+  // KPI
+  const pnlColor = m.total_pnl >= 0 ? 'positive' : 'negative';
+  const pfColor = m.profit_factor >= 1 ? 'positive' : 'negative';
+  document.getElementById('detail-kpis').innerHTML = `
+    <div class="card" style="background:#161820;">
+      <div class="card-title">P&L / лот</div>
+      <div class="card-value ${pnlColor}">${m.total_pnl >= 0 ? '+' : ''}${(m.total_pnl||0).toFixed(2)} ₽</div>
+    </div>
+    <div class="card" style="background:#161820;">
+      <div class="card-title">Win Rate</div>
+      <div class="card-value ${m.win_rate >= 50 ? 'positive' : ''}">${(m.win_rate||0).toFixed(1)}%
+        <span style="font-size:0.85rem; font-weight:400; color:#718096;"> (${m.n_trades} сд.)</span>
+      </div>
+    </div>
+    <div class="card" style="background:#161820;">
+      <div class="card-title">Profit Factor</div>
+      <div class="card-value ${pfColor}">${(m.profit_factor||0).toFixed(2)}</div>
+    </div>
+    <div class="card" style="background:#161820;">
+      <div class="card-title">Max Drawdown</div>
+      <div class="card-value negative">-${(m.max_drawdown||0).toFixed(2)} ₽</div>
+    </div>
+  `;
+
+  // Equity curve
+  if (equityChart) { equityChart.destroy(); equityChart = null; }
+  const ctx = document.getElementById('equity-chart').getContext('2d');
+  const labels = res.equity_curve.map((_, i) => i + 1);
+  const borderColor = (res.equity_curve[res.equity_curve.length - 1] || 0) >= 0 ? '#68d391' : '#fc8181';
+  equityChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        data: res.equity_curve,
+        borderColor,
+        backgroundColor: borderColor + '15',
+        borderWidth: 1.5,
+        pointRadius: res.equity_curve.length > 100 ? 0 : 3,
+        fill: true,
+        tension: 0.2,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {legend: {display: false}},
+      scales: {
+        x: {ticks: {color:'#718096', maxTicksLimit: 10}, grid: {color:'#1e2233'}},
+        y: {ticks: {color:'#718096'}, grid: {color:'#1e2233'}}
+      }
+    }
+  });
+
+  // Exit reasons
+  const reasons = m.exit_reasons || {};
+  const reasonLabels = {
+    stop_loss: 'Стоп-лосс', take_profit: 'Тейк-профит',
+    trailing_stop: 'Трейлинг', breakeven_stop: 'Безубыток',
+    timeout: 'Тайм-аут', end_of_data: 'Конец данных',
+  };
+  const reasonColors = {
+    stop_loss: '#fc8181', take_profit: '#68d391',
+    trailing_stop: '#f6ad55', breakeven_stop: '#b794f4',
+    timeout: '#63b3ed', end_of_data: '#718096',
+  };
+  const n = m.n_trades || 1;
+  document.getElementById('exit-reasons').innerHTML = Object.entries(reasons)
+    .sort((a, b) => b[1] - a[1])
+    .map(([k, v]) => `
+      <div style="background:#161820; border:1px solid #2d3748; border-radius:6px; padding:0.5rem 0.9rem; min-width:130px;">
+        <div style="font-size:0.7rem; color:#718096; margin-bottom:0.25rem;">${reasonLabels[k] || k}</div>
+        <div style="font-size:1.1rem; font-weight:700; color:${reasonColors[k]||'#e2e8f0'};">${v}
+          <span style="font-size:0.75rem; font-weight:400; color:#718096;">(${(v/n*100).toFixed(0)}%)</span>
+        </div>
+      </div>
+    `).join('');
+
+  // Trades table
+  const trades = res.trades || [];
+  document.getElementById('trades-title').textContent =
+    `Сделки (${trades.length}, последние 100)`;
+  const tbody = document.getElementById('trades-body');
+  tbody.innerHTML = '';
+  const shown = trades.slice(-100).reverse();
+  shown.forEach((t, i) => {
+    const pnlColor = t.pnl_rub >= 0 ? '#68d391' : '#fc8181';
+    const dirBadge = t.direction === 'long'
+      ? '<span class="badge badge-long">LONG</span>'
+      : '<span class="badge badge-short">SHORT</span>';
+    const reasonLabel = {
+      stop_loss:'стоп', take_profit:'тейк', trailing_stop:'трейлинг',
+      breakeven_stop:'безубыток', timeout:'тайм-аут', end_of_data:'конец'
+    }[t.exit_reason] || t.exit_reason;
+    tbody.innerHTML += `<tr>
+      <td style="color:#718096;">${trades.length - i}</td>
+      <td>${dirBadge}</td>
+      <td style="font-size:0.8rem;">${t.entry_time_msk}</td>
+      <td style="font-size:0.8rem;">${t.exit_time_msk}</td>
+      <td style="text-align:right;">${t.entry_price}</td>
+      <td style="text-align:right;">${t.exit_price}</td>
+      <td style="font-size:0.8rem; color:#a0aec0;">${reasonLabel}</td>
+      <td style="text-align:right; color:#718096;">${t.hold_candles} св.</td>
+      <td style="text-align:right; color:${pnlColor}; font-weight:600;">
+        ${t.pnl_rub >= 0 ? '+' : ''}${t.pnl_rub.toFixed(2)}
+      </td>
+    </tr>`;
+  });
+}
+
+// ── Init: load cached results if available ───────────────────────────────────
+{% if has_results %}
+loadResults();
+{% endif %}
+</script>
+{% endblock %}
