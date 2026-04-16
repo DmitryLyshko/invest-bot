@@ -26,13 +26,6 @@
         <option value="180">180 дней</option>
       </select>
     </div>
-    <div>
-      <label>Режим сигнала</label><br>
-      <select id="sel-signal-mode" style="min-width: 160px; margin-top: 0.3rem;">
-        <option value="mean_reversion">Mean Reversion (OB/OS выход)</option>
-        <option value="trend">Trend (OB/OS вход)</option>
-      </select>
-    </div>
     <div style="align-self: flex-end;">
       <button class="btn btn-primary" id="btn-run" onclick="startBacktest()">
         ▶ Запустить бэктест
@@ -152,11 +145,10 @@ function startBacktest() {
   document.getElementById('run-info').style.display = '';
   setProgress(0, 0, 'Инициализация...');
 
-  const signalMode = document.getElementById('sel-signal-mode').value;
   fetch('/api/backtest/run', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({tickers: tickers === 'all' ? 'all' : tickers, days, signal_mode: signalMode})
+    body: JSON.stringify({tickers: tickers === 'all' ? 'all' : tickers, days})
   })
   .then(r => r.json())
   .then(data => {

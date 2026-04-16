@@ -44,7 +44,7 @@ def _load_instruments_config() -> dict:
         return yaml.safe_load(f) or {}
 
 
-def _run_job(job_id: str, tickers: list, days: int, signal_mode: str) -> None:
+def _run_job(job_id: str, tickers: list, days: int) -> None:
     """Фоновый поток: прогоняет бэктест по каждому тикеру последовательно."""
     from copy import deepcopy
 
@@ -66,7 +66,7 @@ def _run_job(job_id: str, tickers: list, days: int, signal_mode: str) -> None:
             continue
 
         rsi_params = deepcopy(rsi_cfg[ticker])
-        rsi_params["signal_mode"] = signal_mode  # override из UI
+        # signal_mode берётся из rsi_config.yaml per-тикер, без override из UI
         instr = instr_cfg[ticker]
         instr_params = {
             "ticker": ticker,
@@ -127,9 +127,6 @@ def run():
     data = request.get_json(force=True, silent=True) or {}
     days = int(data.get("days", 60))
     days = max(7, min(days, 180))
-    signal_mode = data.get("signal_mode", "mean_reversion")
-    if signal_mode not in ("mean_reversion", "trend"):
-        signal_mode = "mean_reversion"
 
     rsi_cfg = _load_rsi_config()
     all_tickers = sorted(rsi_cfg.keys())
@@ -156,7 +153,7 @@ def run():
 
     threading.Thread(
         target=_run_job,
-        args=(job_id, tickers, days, signal_mode),
+        args=(job_id, tickers, days),
         daemon=True,
         name=f"backtest_{job_id}",
     ).start()
