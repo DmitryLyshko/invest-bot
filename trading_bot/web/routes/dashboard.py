@@ -95,11 +95,12 @@ def close_position(ticker: str):
     from trading_bot.core.strategy.base_strategy import Signal, SignalType, SignalReason
 
     pms = get_position_managers()
-    ticker = ticker.upper()
-    if ticker not in pms:
+    # Ищем ключ без учёта регистра (ключи могут быть "SBER", "rsi_SBER" и т.д.)
+    matched_key = next((k for k in pms if k.lower() == ticker.lower()), None)
+    if matched_key is None:
         return jsonify({"ok": False, "error": "Тикер не найден"}), 404
 
-    pm = pms[ticker]
+    pm = pms[matched_key]
     if not pm.has_position:
         return jsonify({"ok": False, "error": "Нет открытой позиции"}), 400
 
