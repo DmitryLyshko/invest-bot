@@ -1,0 +1,480 @@
+{% extends "base.html" %}
+{% block title %}Оптимизация RSI — Trading Bot{% endblock %}
+
+{% block content %}
+<h1 class="page-title">Оптимизация параметров RSI</h1>
+
+<!-- ── Панель управления ──────────────────────────────────────────────────── -->
+<div class="card" style="margin-bottom: 1.25rem;">
+  <div class="form-row" style="margin-bottom: 0.75rem;">
+    <div>
+      <label>Тикеры</label><br>
+      <select id="sel-tickers" style="min-width: 160px; margin-top: 0.3rem;">
+        <option value="all">Все ({{ tickers|length }})</option>
+        {% for t in tickers %}
+        <option value="{{ t }}">{{ t }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label>Период</label><br>
+      <select id="sel-days" style="width: 110px; margin-top: 0.3rem;">
+        <option value="30">30 дней</option>
+        <option value="60" selected>60 дней</option>
+        <option value="90">90 дней</option>
+        <option value="180">180 дней</option>
+      </select>
+    </div>
+    <div>
+      <label>Мин. сделок</label><br>
+      <input type="number" id="inp-min-trades" value="10" min="5" max="50"
+             style="width: 80px; margin-top: 0.3rem;">
+    </div>
+    <div style="align-self: flex-end;">
+      <button class="btn btn-primary" id="btn-run" onclick="startOptimize()">
+        &#9654; Запустить оптимизацию
+      </button>
+    </div>
+  </div>
+
+  <div style="font-size: 0.78rem; color: #718096; margin-bottom: 0.5rem;">
+    Grid search: 729 комбинаций × тикер (ob/os/стоп/тейк/трейлинг/ATR).
+    Параметры NOT применяются автоматически — используйте кнопку «Применить».
+  </div>
+
+  <!-- Прогресс -->
+  <div id="progress-wrap" style="display: none; margin-top: 0.75rem;">
+    <div style="display: flex; justify-content: space-between; margin-bottom: 0.3rem; font-size: 0.8rem; color: #a0aec0;">
+      <span id="progress-label">Запуск...</span>
+      <span id="progress-pct">0%</span>
+    </div>
+    <div style="background: #2d3748; border-radius: 4px; height: 6px; overflow: hidden; margin-bottom: 0.4rem;">
+      <div id="progress-bar" style="background: #4299e1; height: 100%; width: 0%; transition: width 0.2s;"></div>
+    </div>
+    <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: #718096;">
+      <span id="combo-label"></span>
+      <span id="combo-pct"></span>
+    </div>
+    <div style="background: #2d3748; border-radius: 4px; height: 3px; overflow: hidden; margin-top: 0.3rem;">
+      <div id="combo-bar" style="background: #68d391; height: 100%; width: 0%; transition: width 0.15s;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Сводная таблица ────────────────────────────────────────────────────── -->
+<div id="summary-section" style="{{ 'display:none' if not has_results else '' }}">
+  <div class="card" style="margin-bottom: 1.25rem;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+      <div class="section-title" style="margin: 0;">Результаты оптимизации</div>
+      <div id="summary-meta" style="font-size: 0.75rem; color: #718096;"></div>
+    </div>
+    <div class="table-wrap">
+      <table id="summary-table">
+        <thead>
+          <tr>
+            <th style="cursor:pointer;" onclick="sortTable('ticker')">Тикер &#8597;</th>
+            <th style="cursor:pointer; text-align:right;" onclick="sortTable('current_pf')">Текущий PF &#8597;</th>
+            <th style="cursor:pointer; text-align:right;" onclick="sortTable('best_pf')">Лучший PF &#8597;</th>
+            <th style="text-align:right;">Прирост</th>
+            <th style="cursor:pointer; text-align:right;" onclick="sortTable('best_trades')">Сделок &#8597;</th>
+            <th style="cursor:pointer; text-align:right;" onclick="sortTable('best_winrate')">Win% &#8597;</th>
+            <th style="text-align:right;">Найдено</th>
+            <th style="text-align:right;">Детали</th>
+          </tr>
+        </thead>
+        <tbody id="summary-body"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ── Детальная панель тикера ────────────────────────────────────────────── -->
+<div id="detail-section" style="display: none;">
+  <div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+      <div style="font-size: 1rem; font-weight: 700; color: #fff;" id="detail-title">—</div>
+      <div style="font-size: 0.75rem; color: #718096;" id="detail-meta"></div>
+    </div>
+
+    <!-- Сравнение текущих и лучших параметров -->
+    <div style="margin-bottom: 1.25rem;">
+      <div class="section-title">Сравнение параметров</div>
+      <div style="overflow-x: auto;">
+        <table id="params-compare" style="font-size: 0.82rem; min-width: 600px;">
+          <thead>
+            <tr>
+              <th>Параметр</th>
+              <th style="text-align:right;">Текущий</th>
+              <th style="text-align:right;">Лучший</th>
+              <th style="text-align:right;">Изменение</th>
+            </tr>
+          </thead>
+          <tbody id="params-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Топ конфигов -->
+    <div>
+      <div class="section-title">Топ конфигов (по profit factor)</div>
+      <div style="overflow-x: auto;">
+        <table id="configs-table" style="font-size: 0.82rem;">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th style="text-align:right;">PF</th>
+              <th style="text-align:right;">Сделок</th>
+              <th style="text-align:right;">Win%</th>
+              <th style="text-align:right;">PnL ₽</th>
+              <th style="text-align:right;">MaxDD</th>
+              <th style="text-align:right;">ob / os</th>
+              <th style="text-align:right;">Стоп</th>
+              <th style="text-align:right;">Тейк</th>
+              <th style="text-align:right;">Трейл</th>
+              <th style="text-align:right;">ATR</th>
+              <th>Выходы</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="configs-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Toast уведомление -->
+<div id="toast" style="
+  position: fixed; bottom: 2rem; right: 2rem;
+  padding: 0.75rem 1.25rem; border-radius: 8px;
+  font-size: 0.875rem; font-weight: 600;
+  display: none; z-index: 1000;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+"></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ── State ─────────────────────────────────────────────────────────────────────
+let summaryData = [];
+let sortKey = 'best_pf';
+let sortAsc = false;
+let pollTimer = null;
+let currentTicker = null;
+let currentDetail = null;
+
+// ── Optimize launch ───────────────────────────────────────────────────────────
+function startOptimize() {
+  const tickers = document.getElementById('sel-tickers').value;
+  const days = parseInt(document.getElementById('sel-days').value);
+  const minTrades = parseInt(document.getElementById('inp-min-trades').value) || 10;
+
+  const btn = document.getElementById('btn-run');
+  btn.disabled = true;
+  btn.textContent = '⏳ Запуск...';
+
+  document.getElementById('progress-wrap').style.display = '';
+  setProgress(0, 0, null, 0, 0, 'Инициализация...');
+
+  fetch('/api/optimize/run', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({tickers: tickers === 'all' ? 'all' : tickers, days, min_trades: minTrades})
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.error) { showToast(data.error, 'error'); resetBtn(); return; }
+    pollStatus(data.job_id, data.total, data.combos_per_ticker);
+  })
+  .catch(e => { showToast('Ошибка запуска: ' + e, 'error'); resetBtn(); });
+}
+
+function pollStatus(jobId, total, combosPerTicker) {
+  pollTimer = setInterval(() => {
+    fetch('/api/optimize/status/' + jobId)
+      .then(r => r.json())
+      .then(job => {
+        setProgress(
+          job.progress, job.total || total,
+          job.current_ticker,
+          job.combo_progress, job.combo_total || combosPerTicker,
+          job.current_ticker
+        );
+        if (job.status === 'done') {
+          clearInterval(pollTimer);
+          loadResults();
+          resetBtn();
+        }
+      })
+      .catch(() => {});
+  }, 1000);
+}
+
+function setProgress(tickerDone, tickerTotal, currentTick, comboDone, comboTotal, label) {
+  const pct = tickerTotal > 0 ? Math.round((tickerDone + (comboDone / (comboTotal || 1))) / tickerTotal * 100) : 0;
+  document.getElementById('progress-bar').style.width = Math.min(pct, 100) + '%';
+  document.getElementById('progress-pct').textContent = Math.min(pct, 100) + '%';
+  document.getElementById('progress-label').textContent = currentTick
+    ? `Обрабатывается: ${currentTick} (${tickerDone + 1}/${tickerTotal})`
+    : `Завершено (${tickerDone}/${tickerTotal})`;
+
+  if (comboTotal > 0) {
+    const cpct = Math.round(comboDone / comboTotal * 100);
+    document.getElementById('combo-bar').style.width = cpct + '%';
+    document.getElementById('combo-label').textContent =
+      currentTick ? `Комбинация ${comboDone}/${comboTotal}` : '';
+    document.getElementById('combo-pct').textContent =
+      currentTick ? cpct + '%' : '';
+  }
+}
+
+function resetBtn() {
+  const btn = document.getElementById('btn-run');
+  btn.disabled = false;
+  btn.textContent = '▶ Запустить оптимизацию';
+}
+
+// ── Load & render summary ─────────────────────────────────────────────────────
+function loadResults() {
+  fetch('/api/optimize/results')
+    .then(r => r.json())
+    .then(data => {
+      summaryData = data;
+      document.getElementById('summary-section').style.display = '';
+      renderSummary();
+      // обновить детали если открыты
+      if (currentTicker) loadDetail(currentTicker);
+    });
+}
+
+function sortTable(key) {
+  if (sortKey === key) sortAsc = !sortAsc;
+  else { sortKey = key; sortAsc = key === 'ticker'; }
+  renderSummary();
+}
+
+function renderSummary() {
+  const rows = [...summaryData].sort((a, b) => {
+    let av = a[sortKey] ?? 0, bv = b[sortKey] ?? 0;
+    if (typeof av === 'string') return sortAsc ? av.localeCompare(bv) : bv.localeCompare(av);
+    return sortAsc ? av - bv : bv - av;
+  });
+
+  const meta = rows.length > 0 ? rows[0].run_at : '';
+  document.getElementById('summary-meta').textContent = meta ? 'Запуск: ' + meta : '';
+
+  const tbody = document.getElementById('summary-body');
+  tbody.innerHTML = '';
+
+  rows.forEach(r => {
+    if (r.error) {
+      tbody.innerHTML += `<tr>
+        <td><b>${r.ticker}</b></td>
+        <td colspan="7" style="color:#fc8181; font-size:0.8rem;">${r.error}</td>
+      </tr>`;
+      return;
+    }
+
+    const currentPfColor = r.current_pf >= 1 ? '#68d391' : '#fc8181';
+    const bestPfColor = r.best_pf >= 1 ? '#68d391' : (r.best_pf > r.current_pf ? '#f6ad55' : '#fc8181');
+    const delta = r.best_pf - r.current_pf;
+    const deltaStr = (delta >= 0 ? '+' : '') + delta.toFixed(2);
+    const deltaColor = delta > 0.05 ? '#68d391' : (delta < -0.05 ? '#fc8181' : '#a0aec0');
+    const isActive = currentTicker === r.ticker;
+
+    tbody.innerHTML += `<tr style="cursor:pointer; ${isActive ? 'background:#1e2a3a;' : ''}"
+        onclick="loadDetail('${r.ticker}')">
+      <td><b>${r.ticker}</b></td>
+      <td style="text-align:right; color:${currentPfColor};">${r.current_pf.toFixed(2)}</td>
+      <td style="text-align:right; color:${bestPfColor}; font-weight:600;">${r.best_pf.toFixed(2)}</td>
+      <td style="text-align:right; color:${deltaColor}; font-weight:600;">${deltaStr}</td>
+      <td style="text-align:right;">${r.best_trades}</td>
+      <td style="text-align:right; color:${r.best_winrate >= 50 ? '#68d391' : '#a0aec0'};">${r.best_winrate.toFixed(1)}%</td>
+      <td style="text-align:right; color:#718096;">${r.configs_found}</td>
+      <td style="text-align:right;">
+        <span style="font-size:0.75rem; color:#4299e1;">детали &#8250;</span>
+      </td>
+    </tr>`;
+  });
+}
+
+// ── Load & render detail ──────────────────────────────────────────────────────
+function loadDetail(ticker) {
+  currentTicker = ticker;
+  renderSummary(); // перекрасить активную строку
+
+  fetch('/api/optimize/results/' + ticker)
+    .then(r => r.json())
+    .then(res => {
+      if (res.error) { showToast(res.error, 'error'); return; }
+      currentDetail = res;
+      renderDetail(res);
+      const sect = document.getElementById('detail-section');
+      sect.style.display = '';
+      sect.scrollIntoView({behavior: 'smooth', block: 'start'});
+    });
+}
+
+const PARAM_LABELS = {
+  ob_value: 'OB (перекупл.)',
+  os_value: 'OS (перепрод.)',
+  stop_ticks: 'Стоп (тиков)',
+  take_profit_ticks: 'Тейк-профит (тиков)',
+  trailing_stop_ticks: 'Трейлинг-стоп (тиков)',
+  breakeven_ticks: 'Безубыток (тиков)',
+  atr_ratio_min: 'ATR ratio min',
+};
+
+function renderDetail(res) {
+  const cm = res.current_metrics || {};
+  const cp = res.current_params || {};
+  const top = res.top_configs || [];
+  const bp_cfg = top.length > 0 ? top[0] : null;
+
+  document.getElementById('detail-title').textContent =
+    `${res.ticker} — ${res.days} дней`;
+  document.getElementById('detail-meta').textContent =
+    'Запуск: ' + (res.run_at || '') + (top.length > 0
+      ? ` · Найдено ${top.length} конфигов`
+      : ' · Конфиги не найдены');
+
+  // Таблица сравнения параметров
+  const pbody = document.getElementById('params-body');
+  pbody.innerHTML = '';
+  if (bp_cfg) {
+    const bp = bp_cfg.params;
+    Object.entries(PARAM_LABELS).forEach(([key, label]) => {
+      const cur = cp[key] ?? '—';
+      const best = bp[key] ?? '—';
+      const changed = String(cur) !== String(best);
+      const arrow = changed ? (best > cur ? '&#8593;' : '&#8595;') : '=';
+      const arrowColor = changed ? (key === 'stop_ticks' ? '#f6ad55' : '#68d391') : '#718096';
+      pbody.innerHTML += `<tr>
+        <td style="color:#a0aec0;">${label}</td>
+        <td style="text-align:right;">${cur}</td>
+        <td style="text-align:right; font-weight:600; color:${changed ? '#e2e8f0' : '#718096'};">${best}</td>
+        <td style="text-align:right; color:${arrowColor}; font-weight:700;">${arrow}</td>
+      </tr>`;
+    });
+    // Метрики
+    pbody.innerHTML += `<tr style="border-top: 1px solid #2d3748;">
+      <td style="color:#718096; padding-top:0.75rem;">Profit Factor</td>
+      <td style="text-align:right; color:${cm.profit_factor >= 1 ? '#68d391' : '#fc8181'}; padding-top:0.75rem;">${(cm.profit_factor||0).toFixed(2)}</td>
+      <td style="text-align:right; color:${bp_cfg.metrics.profit_factor >= 1 ? '#68d391' : '#f6ad55'}; font-weight:700; padding-top:0.75rem;">${bp_cfg.metrics.profit_factor.toFixed(2)}</td>
+      <td style="text-align:right; color:#68d391; padding-top:0.75rem;">&#8593;</td>
+    </tr>
+    <tr>
+      <td style="color:#718096;">Win Rate</td>
+      <td style="text-align:right;">${(cm.win_rate||0).toFixed(1)}%</td>
+      <td style="text-align:right; font-weight:600;">${bp_cfg.metrics.win_rate.toFixed(1)}%</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td style="color:#718096;">Сделок</td>
+      <td style="text-align:right;">${cm.n_trades||0}</td>
+      <td style="text-align:right; font-weight:600;">${bp_cfg.metrics.n_trades}</td>
+      <td></td>
+    </tr>`;
+  } else {
+    pbody.innerHTML = `<tr><td colspan="4" style="color:#718096;">
+      Подходящих конфигов не найдено (нет комбинаций с ≥ мин. сделок).
+      Попробуйте снизить порог «Мин. сделок» или увеличить период.
+    </td></tr>`;
+  }
+
+  // Топ конфигов
+  const cbody = document.getElementById('configs-body');
+  cbody.innerHTML = '';
+  if (top.length === 0) {
+    cbody.innerHTML = `<tr><td colspan="13" style="color:#718096; padding:1rem;">Нет конфигов</td></tr>`;
+    return;
+  }
+
+  const exitLabels = {
+    stop_loss:'стоп', take_profit:'тейк', trailing_stop:'трейл',
+    breakeven_stop:'безуб', timeout:'тайм', end_of_data:'конец'
+  };
+
+  top.forEach((cfg, i) => {
+    const m = cfg.metrics;
+    const p = cfg.params;
+    const pfColor = m.profit_factor >= 1 ? '#68d391' : '#f6ad55';
+    const reasons = Object.entries(m.exit_reasons || {})
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([k, v]) => `${exitLabels[k]||k}:${v}`)
+      .join(' ');
+
+    cbody.innerHTML += `<tr>
+      <td style="color:#718096;">${i + 1}</td>
+      <td style="text-align:right; color:${pfColor}; font-weight:700;">${m.profit_factor.toFixed(2)}</td>
+      <td style="text-align:right;">${m.n_trades}</td>
+      <td style="text-align:right; color:${m.win_rate >= 50 ? '#68d391' : '#a0aec0'};">${m.win_rate.toFixed(1)}%</td>
+      <td style="text-align:right; color:${m.total_pnl >= 0 ? '#68d391' : '#fc8181'};">${m.total_pnl >= 0 ? '+' : ''}${m.total_pnl.toFixed(1)}</td>
+      <td style="text-align:right; color:#fc8181;">${m.max_drawdown.toFixed(1)}</td>
+      <td style="text-align:right; white-space:nowrap;">${p.ob_value} / ${p.os_value}</td>
+      <td style="text-align:right;">${p.stop_ticks}</td>
+      <td style="text-align:right;">${p.take_profit_ticks}</td>
+      <td style="text-align:right;">${p.trailing_stop_ticks}</td>
+      <td style="text-align:right;">${p.atr_ratio_min}</td>
+      <td style="font-size:0.75rem; color:#718096; white-space:nowrap;">${reasons}</td>
+      <td>
+        <button class="btn btn-success btn-sm"
+                id="apply-btn-${i}"
+                onclick="applyConfig('${res.ticker}', ${i})">
+          Применить
+        </button>
+      </td>
+    </tr>`;
+  });
+}
+
+// ── Apply config ──────────────────────────────────────────────────────────────
+function applyConfig(ticker, idx) {
+  const btn = document.getElementById('apply-btn-' + idx);
+  if (!btn) return;
+
+  btn.disabled = true;
+  btn.textContent = '...';
+
+  fetch('/api/optimize/apply/' + ticker, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({config_idx: idx})
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.ok) {
+      btn.textContent = '✓ Применён';
+      btn.style.background = '#2d6a4f';
+      showToast(`${ticker}: конфиг #${idx + 1} применён в rsi_config.yaml`, 'success');
+    } else {
+      btn.disabled = false;
+      btn.textContent = 'Применить';
+      showToast('Ошибка: ' + (data.error || 'неизвестно'), 'error');
+    }
+  })
+  .catch(e => {
+    btn.disabled = false;
+    btn.textContent = 'Применить';
+    showToast('Ошибка сети: ' + e, 'error');
+  });
+}
+
+// ── Toast ─────────────────────────────────────────────────────────────────────
+function showToast(msg, type) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.style.background = type === 'success' ? '#276749' : '#9b2c2c';
+  el.style.color = '#fff';
+  el.style.display = 'block';
+  clearTimeout(el._timer);
+  el._timer = setTimeout(() => { el.style.display = 'none'; }, 4000);
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+{% if has_results %}
+loadResults();
+{% endif %}
+</script>
+{% endblock %}

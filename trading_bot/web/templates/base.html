@@ -95,6 +95,7 @@
         <a href="{{ url_for('strategies.index') }}" class="{{ 'active' if request.endpoint == 'strategies.index' }}">Стратегии</a>
         <a href="{{ url_for('rsi_test.index') }}" class="{{ 'active' if request.endpoint in ('rsi_test.index', 'rsi_test.api_rsi_data') }}">RSI-тест</a>
         <a href="{{ url_for('backtest.index') }}" class="{{ 'active' if request.endpoint == 'backtest.index' }}">Бэктест</a>
+        <a href="{{ url_for('optimize.index') }}" class="{{ 'active' if request.endpoint == 'optimize.index' }}">Оптимизация</a>
         <span class="spacer"></span>
         <a href="{{ url_for('logout') }}" class="logout">Выход</a>
     </nav>
