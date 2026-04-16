@@ -87,6 +87,36 @@ def position():
     return jsonify({"positions": positions})
 
 
+@bp.route("/api/position/<ticker>/close", methods=["POST"])
+@login_required
+def close_position(ticker: str):
+    """Принудительно закрыть открытую позицию по тикеру (по рынку)."""
+    from trading_bot.web.app import get_position_managers
+    from trading_bot.core.strategy.base_strategy import Signal, SignalType, SignalReason
+
+    pms = get_position_managers()
+    ticker = ticker.upper()
+    if ticker not in pms:
+        return jsonify({"ok": False, "error": "Тикер не найден"}), 404
+
+    pm = pms[ticker]
+    if not pm.has_position:
+        return jsonify({"ok": False, "error": "Нет открытой позиции"}), 400
+
+    manual_signal = Signal(
+        signal_type=SignalType.EXIT,
+        reason=SignalReason.MANUAL,
+    )
+    db_signal = pm._save_signal(
+        signal_type="exit",
+        ofi_value=pm._get_current_ofi(),
+        reason="manual",
+        acted_on=True,
+    )
+    pm._close_position(manual_signal, db_signal.id, exit_reason="manual")
+    return jsonify({"ok": True})
+
+
 @bp.route("/api/account")
 @login_required
 def account():

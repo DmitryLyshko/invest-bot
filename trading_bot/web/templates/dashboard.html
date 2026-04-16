@@ -43,6 +43,18 @@
     </div>
 </div>
 
+<!-- Close Position Modal -->
+<div id="close-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:1000; align-items:center; justify-content:center;">
+    <div style="background:#1a2035; border:1px solid #2d3748; border-radius:0.75rem; padding:2rem; max-width:400px; width:90%; box-shadow:0 8px 32px rgba(0,0,0,0.5);">
+        <div style="font-size:1.1rem; font-weight:600; margin-bottom:1rem; color:#e2e8f0;">Закрыть позицию</div>
+        <div style="color:#a0aec0; margin-bottom:1.5rem;">Вы действительно хотите закрыть позицию <strong id="modal-ticker" style="color:#e2e8f0;"></strong>?</div>
+        <div style="display:flex; gap:0.75rem; justify-content:flex-end;">
+            <button class="btn btn-sm" onclick="closeModal()" style="background:#2d3748; color:#a0aec0;">Нет</button>
+            <button class="btn btn-sm btn-danger" id="modal-confirm-btn" onclick="confirmClose()">Да, закрыть</button>
+        </div>
+    </div>
+</div>
+
 <!-- Equity Chart -->
 <div class="card" style="margin-bottom: 1.5rem;">
     <div class="section-title">Накопленный P&L (30 дней)</div>
@@ -214,16 +226,58 @@ async function refreshPosition() {
     el.innerHTML = active.map(([ticker, p]) => {
         const pnlColor = p.unrealized_pnl >= 0 ? '#68d391' : '#fc8181';
         const dirColor = p.direction === 'long' ? '#68d391' : '#fc8181';
-        return `<div style="display:flex; align-items:center; gap:1rem; padding:0.5rem 0; border-bottom:1px solid #1e2233;">
+        return `<div style="display:flex; align-items:center; gap:1rem; padding:0.5rem 0; border-bottom:1px solid #1e2233; flex-wrap:wrap;">
             <strong style="min-width:60px;">${ticker}</strong>
             <span style="color:${dirColor}; font-weight:600; min-width:50px;">${p.direction.toUpperCase()}</span>
             <span style="color:#a0aec0;">${p.quantity_lots} лот @ ${p.entry_price.toFixed(2)}</span>
             <span style="color:#a0aec0;">→ ${p.current_price ? p.current_price.toFixed(2) : '—'}</span>
             <span style="color:${pnlColor}; font-weight:600; margin-left:auto;">${p.unrealized_pnl >= 0 ? '+' : ''}${p.unrealized_pnl.toFixed(2)} ₽</span>
             <span style="color:#718096; font-size:0.8rem;">${p.hold_minutes}м</span>
+            <button class="btn btn-sm btn-danger" style="padding:0.2rem 0.6rem; font-size:0.75rem;" onclick="openCloseModal('${ticker}')">Закрыть</button>
         </div>`;
     }).join('');
 }
+
+// Close position modal
+let _closeTicker = null;
+
+function openCloseModal(ticker) {
+    _closeTicker = ticker;
+    document.getElementById('modal-ticker').textContent = ticker;
+    const modal = document.getElementById('close-modal');
+    modal.style.display = 'flex';
+}
+
+function closeModal() {
+    document.getElementById('close-modal').style.display = 'none';
+    _closeTicker = null;
+}
+
+async function confirmClose() {
+    if (!_closeTicker) return;
+    const btn = document.getElementById('modal-confirm-btn');
+    btn.disabled = true;
+    btn.textContent = 'Закрываю...';
+    try {
+        const r = await fetch(`/api/position/${_closeTicker}/close`, { method: 'POST' });
+        const d = await r.json();
+        if (!d.ok) {
+            alert('Ошибка: ' + (d.error || 'неизвестная ошибка'));
+        }
+    } catch (e) {
+        alert('Ошибка соединения');
+    } finally {
+        closeModal();
+        btn.disabled = false;
+        btn.textContent = 'Да, закрыть';
+        refreshPosition();
+    }
+}
+
+// Close modal on backdrop click
+document.getElementById('close-modal').addEventListener('click', function(e) {
+    if (e.target === this) closeModal();
+});
 
 refreshStatus();
 refreshAccount();
